@@ -86,8 +86,7 @@ func TestMiddleware_CallTool_Denied(t *testing.T) {
 	}
 	if result == nil {
 		t.Error("result should not be nil")
-	}
-	if result.Error != ErrPolicyDenied {
+	} else if result.Error != ErrPolicyDenied {
 		t.Errorf("expected ErrPolicyDenied in result, got: %v", result.Error)
 	}
 }
@@ -185,7 +184,7 @@ func TestExtractCallerContext(t *testing.T) {
 		t.Error("expected empty CallerContext for nil context")
 	}
 
-	cc = extractCallerContext(nil)
+	cc = extractCallerContext(context.TODO())
 	if cc.Role != "" || cc.UserID != "" || cc.SessionID != "" {
 		t.Error("expected empty CallerContext for nil ctx")
 	}

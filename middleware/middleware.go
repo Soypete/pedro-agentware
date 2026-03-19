@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"errors"
-	"sync"
 )
 
 var ErrToolNotFound = errors.New("tool not found")
@@ -15,7 +14,6 @@ type Middleware struct {
 	policy   PolicyEvaluator
 	tools    []ToolDefinition
 	toolMap  map[string]ToolDefinition
-	mu       sync.RWMutex
 }
 
 type MiddlewareOption func(*Middleware)
@@ -124,7 +122,9 @@ func extractCallerContext(ctx context.Context) CallerContext {
 	return CallerContext{}
 }
 
-var callerContextKey = struct{}{}
+type callerContextKeyType string
+
+var callerContextKey callerContextKeyType = "caller-context"
 
 func WithCallerContext(ctx context.Context, callerCtx CallerContext) context.Context {
 	return context.WithValue(ctx, callerContextKey, callerCtx)
