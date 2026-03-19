@@ -3,17 +3,19 @@ package middleware
 import (
 	"context"
 	"errors"
+
+	"github.com/pedro/agent-middleware/types"
 )
 
 var ErrToolNotFound = errors.New("tool not found")
 var ErrPolicyDenied = errors.New("policy denied")
 
 type Middleware struct {
-	executor ToolExecutor
+	executor types.ToolExecutor
 	auditor  Auditor
 	policy   PolicyEvaluator
-	tools    []ToolDefinition
-	toolMap  map[string]ToolDefinition
+	tools    []types.ToolDefinition
+	toolMap  map[string]types.ToolDefinition
 }
 
 type MiddlewareOption func(*Middleware)
