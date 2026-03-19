@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run tests
+        run: cd middleware && go test -v ./...
+
+      - name: Run coverage
+        run: cd middleware && go test -coverprofile=coverage.out ./...
+
+      - name: Check coverage
+        run: |
+          cd middleware
+          COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $NF}' | cut -d'%' -f1)
+          if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+            echo "Coverage $COVERAGE% is below 90%"
+            exit 1
+          fi
+          echo "Coverage: $COVERAGE%"
+
+      - name: Build
+        run: cd middleware && go build ./...
+
+      - name: Run golint
+        uses: golangci/golangci-lint-action@v9.2.0
+        with:
+          working-directory: ./middleware
+          args: --timeout=5m
+
+      - name: Vet
+        run: cd middleware && go vet ./...
