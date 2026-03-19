@@ -1,0 +1,43 @@
+models:
+  - name: gpt-oss-20b
+    provider: llama_cpp
+    endpoint: "http://localhost:8080"
+    temperature: 0.7
+    max_tokens: 4096
+    tool_support: direct
+
+  - name: minimax_m2.5
+    provider: llama_cpp
+    endpoint: "http://localhost:8080"
+    temperature: 0.7
+    max_tokens: 4096
+    tool_support: direct
+
+  - name: qwen
+    provider: ollama
+    endpoint: "http://localhost:11434"
+    model: "qwen:7b"
+    temperature: 0.7
+    max_tokens: 4096
+    tool_support: hybrid
+
+  - name: claude-3-5-sonnet
+    provider: anthropic
+    model: "claude-3-5-sonnet-20241022"
+    temperature: 0.7
+    max_tokens: 4096
+    tool_support: mcp
+
+  - name: gpt-4o
+    provider: openai
+    model: "gpt-4o"
+    temperature: 0.7
+    max_tokens: 4096
+    tool_support: mcp
+
+eval_config:
+  max_turns: 10
+  timeout: 120
+  trials_per_task: 1
+  save_transcripts: true
+  output_dir: "../results"
