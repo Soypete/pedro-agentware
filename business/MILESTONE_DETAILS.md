@@ -48,28 +48,37 @@ This is the foundation. Everything else builds on the policy evaluation engine a
 
 ---
 
-## Milestone 2: MCP Server
+## Milestone 2: Model-Agnostic Tool Call Support
 
 ### Context
 
-MCP is the emerging standard for exposing tools to LLMs. Wrapping the middleware as an MCP server means any MCP-compatible client can use it. PedroCLI already has an `MCPClientAdapter`, making this a natural bridge.
+MCP is only supported by Anthropic and OpenAI. To support all models—especially self-hosted models—we need model-agnostic tool call handling first. PedroCLI's `pkg/toolformat` provides a proven pattern:
+
+- **`ToolBridge`** interface (`bridge.go`) - unified interface for tool execution with `DirectBridge` and `HybridBridge` implementations
+- **`ToolFormatter`** interface (`formatter.go`) - handles tool definition formatting and tool call parsing for multiple model families: Llama3, Qwen, Mistral, Hermes, Claude, OpenAI, GLM4, Generic
+
+MCP support becomes optional/secondary—useful for clients that support it, but not required for core functionality.
 
 ### Tasks
 
-1. **Define MCP protocol types** - `ListToolsRequest/Response`, `CallToolRequest/Response`, JSON-RPC envelope
-2. **Implement `MCPServer`** - wraps `Middleware`, handles `tools/list` and `tools/call`
-3. **Implement stdio transport** - for subprocess-based MCP (matches PedroCLI pattern)
-4. **Implement HTTP+SSE transport** - for network-based MCP
-5. **Add tool list filtering** - `tools/list` returns only policy-permitted tools
-6. **Integration test** - MCP client -> middleware MCP server -> mock tool MCP server
+1. **Define model-agnostic tool format** - Leverage pedrocli's `ToolDefinition` format
+2. **Implement formatter abstraction** - `ToolFormatter` interface supporting all model families
+3. **Implement tool call parser** - Parse tool calls from LLM responses (JSON, text patterns)
+4. **Implement `DirectBridge`** - Execute tools directly without MCP
+5. **Implement `HybridBridge`** - Route some tools direct, fallback to MCP for others
+6. **Add tool list filtering** - Only policy-permitted tools exposed to LLM
+7. **MCP server (OPTIONAL)** - Wrap middleware as MCP server for Anthropic/OpenAI clients
+8. **Integration test** - LLM → middleware → tool execution (non-MCP path)
 
 ### Acceptance Criteria
 
-- [ ] MCP server responds to `tools/list` and `tools/call` over stdio
-- [ ] MCP server responds over HTTP+SSE
-- [ ] Tool list filtered by caller policy
-- [ ] Tool calls fully enforced (deny returns MCP error, filter modifies result)
-- [ ] Can chain: client -> middleware MCP -> upstream MCP server
+- [ ] ToolFormatter supports Llama3, Qwen, Mistral, Claude, OpenAI, GLM4 formats
+- [ ] DirectBridge executes tools without MCP
+- [ ] HybridBridge routes to direct or MCP based on tool config
+- [ ] Tool list filtered by caller policy (only permitted tools exposed)
+- [ ] Tool call parsing works for at least 3 model families
+- [ ] MCP server responds to `tools/list` and `tools/call` (OPTIONAL)
+- [ ] Can chain: LLM → middleware → tool (no MCP required)
 
 ### Dependencies
 
