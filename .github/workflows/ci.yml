@@ -37,7 +37,7 @@ jobs:
       - name: Check coverage
         run: |
           cd middleware
-          COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $2}' | cut -d'%' -f1)
+          COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $NF}' | cut -d'%' -f1)
           if (( $(echo "$COVERAGE < 90" | bc -l) )); then
             echo "Coverage $COVERAGE% is below 90%"
             exit 1
