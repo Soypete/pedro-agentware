@@ -65,7 +65,13 @@ func (h *HybridBridge) ExecuteTool(ctx context.Context, call ToolCall) (*types.T
 }
 
 func (h *HybridBridge) executeViaMCP(ctx context.Context, call ToolCall) (*types.ToolResult, error) {
-	parts := splitToolName(call.Name)
+	if !strings.Contains(call.Name, "/") {
+		return &types.ToolResult{
+			Error: ErrInvalidToolFormat,
+		}, ErrInvalidToolFormat
+	}
+
+	parts := strings.SplitN(call.Name, "/", 2)
 	if len(parts) != 2 {
 		return &types.ToolResult{
 			Error: ErrInvalidToolFormat,
