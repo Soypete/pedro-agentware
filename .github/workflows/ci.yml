@@ -48,7 +48,7 @@ jobs:
         run: cd middleware && go build ./...
 
       - name: Run golint
-        uses: golangci/golangci-lint-action@v11
+        uses: golangci/golangci-lint-action@v9.2.0
         with:
           working-directory: ./middleware
           args: --timeout=5m
