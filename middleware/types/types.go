@@ -33,6 +33,7 @@ type CallerContext struct {
 	UserID    string
 	SessionID string
 	Source    string
+	Phase     string
 	Metadata  map[string]interface{}
 }
 
