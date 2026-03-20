@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pedro/agent-middleware/types"
+	"github.com/soypete/pedro-agentware/middleware/types"
 )
 
 var ErrToolNotFound = errors.New("tool not found")
