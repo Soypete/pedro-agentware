@@ -29,7 +29,23 @@ type ToolFormatter interface {
 type ToolCall struct {
 	Name      string
 	Arguments map[string]interface{}
-	ID        string
+}
+
+type flexibleArgs map[string]interface{}
+
+func (fa *flexibleArgs) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		*fa = make(map[string]interface{})
+		return nil
+	}
+	if data[0] == '"' {
+		var argsStr string
+		if err := json.Unmarshal(data, &argsStr); err != nil {
+			return err
+		}
+		return json.Unmarshal([]byte(argsStr), (*map[string]interface{})(fa))
+	}
+	return json.Unmarshal(data, (*map[string]interface{})(fa))
 }
 
 type ToolCallParser func(response string) ([]ToolCall, error)
@@ -110,19 +126,17 @@ func ParseOpenAIToolCalls(response string) ([]ToolCall, error) {
 	var calls []ToolCall
 	var toolCalls []struct {
 		Function struct {
-			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
+			Name      string       `json:"name"`
+			Arguments flexibleArgs `json:"arguments"`
 		} `json:"function"`
 	}
 	if err := json.Unmarshal([]byte(response), &toolCalls); err != nil {
 		return nil, err
 	}
 	for _, tc := range toolCalls {
-		args := make(map[string]interface{})
-		json.Unmarshal(tc.Function.Arguments, &args)
 		calls = append(calls, ToolCall{
 			Name:      tc.Function.Name,
-			Arguments: args,
+			Arguments: tc.Function.Arguments,
 		})
 	}
 	return calls, nil
