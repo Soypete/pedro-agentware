@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/soypete/pedro-agentware/types"
+	"github.com/soypete/pedro-agentware/middleware/types"
 )
 
 type Action = types.Action

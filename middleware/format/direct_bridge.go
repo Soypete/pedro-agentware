@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/soypete/pedro-agentware/types"
+	"github.com/soypete/pedro-agentware/middleware/types"
 )
 
 type DirectBridge struct {
