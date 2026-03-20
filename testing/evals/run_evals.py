@@ -338,8 +338,6 @@ def main():
     # Override endpoint for gpt-oss
     if args.model == "gpt-oss-20b":
         model_cfg["endpoint"] = args.endpoint
-        # Use the actual model name from llama.cpp
-        model_cfg["model"] = "unsloth_gpt-oss-20b-GGUF_gpt-oss-20b-Q4_K_M.gguf"
     
     client = ModelClient(model_cfg)
     executor = ToolExecutor(tools_config)
