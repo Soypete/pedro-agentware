@@ -1,4 +1,4 @@
-module github.com/pedro/agent-middleware
+module github.com/soypete/pedro-agentware/middleware
 
 go 1.24.4
 
