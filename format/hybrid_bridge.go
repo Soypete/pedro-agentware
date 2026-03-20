@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pedro/agent-middleware/types"
+	"github.com/soypete/pedro-agentware/types"
 )
 
 type MCPBridge interface {

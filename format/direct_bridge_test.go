@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pedro/agent-middleware/types"
+	"github.com/soypete/pedro-agentware/types"
 )
 
 func TestDirectBridge_FormatTools(t *testing.T) {
