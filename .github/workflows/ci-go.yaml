@@ -1,17 +1,21 @@
-name: CI
+name: Go CI
 
 on:
+  push:
+    branches: [main, develop]
   pull_request:
-    branches: [main, master]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/ci.yml'
+    branches: [main, develop]
 
 jobs:
-  test:
+  test-go:
+    name: Test (Go)
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.changed_files, 'middleware/') ||
+         contains(github.event.pull_request.changed_files, 'go.mod') ||
+         contains(github.event.pull_request.changed_files, 'go.sum')))
     steps:
       - uses: actions/checkout@v4
 
