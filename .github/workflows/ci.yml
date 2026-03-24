@@ -1,17 +1,47 @@
 name: CI
 
 on:
+  push:
+    branches: [main, develop]
   pull_request:
-    branches: [main, master]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/ci.yml'
+    branches: [main, develop]
 
 jobs:
-  test:
+  lint-python:
+    name: Lint (Python)
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.changed_files, 'middleware_py') ||
+         contains(github.event.pull_request.changed_files, '.python-version') ||
+         contains(github.event.pull_request.changed_files, 'pyproject.toml') ||
+         contains(github.event.pull_request.changed_files, 'ruff') ||
+         contains(github.event.pull_request.changed_files, 'mypy')))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - run: uv pip install --dev ruff mypy
+
+      - name: Run ruff
+        run: uv run ruff check .
+
+      - name: Run mypy
+        run: uv run mypy middleware_py
+
+  test-go:
+    name: Test (Go)
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.changed_files, 'middleware/') ||
+         contains(github.event.pull_request.changed_files, 'go.mod') ||
+         contains(github.event.pull_request.changed_files, 'go.sum')))
     steps:
       - uses: actions/checkout@v4
 
@@ -55,3 +85,59 @@ jobs:
 
       - name: Vet
         run: cd middleware && go vet ./...
+
+  test-python:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.changed_files, 'middleware_py') ||
+         contains(github.event.pull_request.changed_files, '.python-version') ||
+         contains(github.event.pull_request.changed_files, 'pyproject.toml')))
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - run: uv pip install --dev . pytest pytest-cov
+
+      - name: Run tests
+        run: uv run pytest --cov=middleware_py --cov-report=xml
+
+      - uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.changed_files, 'middleware_py') ||
+         contains(github.event.pull_request.changed_files, '.python-version') ||
+         contains(github.event.pull_request.changed_files, 'pyproject.toml')))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - run: uv pip install build
+
+      - name: Build package
+        run: uv run python -m build
+
+      - name: Verify package
+        run: |
+          uv pip install dist/*.whl --force-reinstall
+          uv run python -c "import middleware_py; print(middleware_py.__version__)"
