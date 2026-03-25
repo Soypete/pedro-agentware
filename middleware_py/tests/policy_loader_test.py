@@ -3,7 +3,7 @@
 import os
 import tempfile
 from middleware_py.policy_loader import load_policy_from_yaml, load_policy_from_file
-from middleware_py.middleware_types import Action
+from middleware_py.types import Action
 
 
 def test_load_policy_from_string():

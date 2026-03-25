@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from middleware_py.middleware_types import Action, ToolResult
+from middleware_py.types import Action, ToolResult
 from middleware_py.middleware import Middleware
 from middleware_py.policy import Policy, Rule
 from middleware_py.langgraph import (

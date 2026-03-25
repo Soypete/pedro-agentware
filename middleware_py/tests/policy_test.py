@@ -6,7 +6,7 @@ from middleware_py.policy import (
     Rule,
     match_operator,
 )
-from middleware_py.middleware_types import (
+from middleware_py.types import (
     Action,
     CallerContext,
     Condition,

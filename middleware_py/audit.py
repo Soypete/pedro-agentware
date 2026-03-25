@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 import threading
 
-from middleware_py.middleware_types import Decision, ToolCall
+from middleware_py.types import Decision, ToolCall
 
 
 @dataclass

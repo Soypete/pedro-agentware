@@ -1,6 +1,6 @@
 """Tests for middleware_py.types."""
 
-from middleware_py.middleware_types import (
+from middleware_py.types import (
     Action,
     CallerContext,
     ToolDefinition,

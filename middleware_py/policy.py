@@ -6,7 +6,7 @@ import re
 import time
 import threading
 
-from middleware_py.middleware_types import (
+from middleware_py.types import (
     Action,
     Condition,
     Decision,

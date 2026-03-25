@@ -2,7 +2,7 @@
 
 from typing import Any, Callable, Sequence
 
-from middleware_py.middleware_types import CallerContext, ToolCall, ToolResult
+from middleware_py.types import CallerContext, ToolCall, ToolResult
 from middleware_py.middleware import Middleware
 
 

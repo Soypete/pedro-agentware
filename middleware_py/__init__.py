@@ -1,6 +1,6 @@
 """Middleware Py - MCP-compatible middleware for policy enforcement on tool calls."""
 
-from middleware_py.middleware_types import (
+from middleware_py.types import (
     Action,
     CallerContext,
     Decision,

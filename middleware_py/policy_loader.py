@@ -3,7 +3,7 @@
 from typing import Any
 import yaml
 
-from middleware_py.middleware_types import Action, Condition, RateLimitConfig
+from middleware_py.types import Action, Condition, RateLimitConfig
 from middleware_py.policy import Policy, Rule
 
 
