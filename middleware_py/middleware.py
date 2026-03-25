@@ -4,7 +4,7 @@ from typing import Any, Callable
 import threading
 from collections import defaultdict
 
-from middleware_py.types import (
+from middleware_py.middleware_types import (
     Action,
     CallerContext,
     ToolCall,

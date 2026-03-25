@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 
 class Action(Enum):
@@ -17,10 +17,10 @@ class Action(Enum):
 class CallerContext:
     """Context about the caller making a tool call."""
 
-    user_id: str | None = None
-    session_id: str | None = None
-    role: str | None = None
-    source: str | None = None
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    role: Optional[str] = None
+    source: Optional[str] = None
     trusted: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 

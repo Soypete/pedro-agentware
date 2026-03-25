@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from middleware_py.audit import AuditEntry, InMemoryAuditor, NoOpAuditor
-from middleware_py.types import Action, CallerContext, Decision, ToolCall
+from middleware_py.middleware_types import Action, CallerContext, Decision, ToolCall
 
 
 class TestAuditEntry:

@@ -1,7 +1,7 @@
 """Tests for middleware module."""
 
 from middleware_py.middleware import Middleware, with_auditor, with_tools, CallHistory
-from middleware_py.types import Action, CallerContext, ToolDefinition, ToolResult
+from middleware_py.middleware_types import Action, CallerContext, ToolDefinition, ToolResult
 from middleware_py.policy import Policy, Rule
 from middleware_py.audit import InMemoryAuditor
 
