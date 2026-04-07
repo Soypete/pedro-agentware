@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--file-search", action="store_true", help="Run file search evals only")
     parser.add_argument("--general", action="store_true", help="Run general tool calling evals only")
     parser.add_argument("--all", action="store_true", default=True, help="Run all evals (default)")
-    parser.add_argument("--models", default="gpt-oss-20b,nemotron-3-super-120b,qwen3-coder-30b", help="Comma-separated model list")
+    parser.add_argument("--models", default="nemotron-3-super-120b", help="Comma-separated model list")
     parser.add_argument("--base-url", default="http://pedrogpt:8080/v1", help="API base URL")
     parser.add_argument("--max-turns", type=int, default=10, help="Max turns per eval")
     args = parser.parse_args()
