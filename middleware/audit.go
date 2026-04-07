@@ -1,77 +1,61 @@
 package middleware
 
-import (
-	"sync"
-	"time"
-)
+import "time"
+
+type AuditRecord struct {
+	SessionID string
+	ToolName  string
+	Args      map[string]any
+	Decision  Decision
+	Timestamp time.Time
+}
 
 type Auditor interface {
-	Record(decision Decision)
-	GetViolations(since time.Time) []Decision
-	GetDecisions(tool string, since time.Time) []Decision
-	Close() error
+	Record(record AuditRecord)
+	Query(filter AuditFilter) []AuditRecord
 }
 
-type inMemoryAuditor struct {
-	decisions []Decision
-	mu        sync.RWMutex
-	maxSize   int
+type AuditFilter struct {
+	SessionID string
+	ToolName  string
+	Action    Action
+	Since     time.Time
+	Limit     int
 }
 
-func NewInMemoryAuditor(maxSize int) Auditor {
-	if maxSize <= 0 {
-		maxSize = 10000
+type InMemoryAuditor struct {
+	records []AuditRecord
+}
+
+func NewInMemoryAuditor() *InMemoryAuditor {
+	return &InMemoryAuditor{
+		records: make([]AuditRecord, 0),
 	}
-	return &inMemoryAuditor{
-		decisions: make([]Decision, 0, maxSize),
-		maxSize:   maxSize,
-	}
 }
 
-func (a *inMemoryAuditor) Record(decision Decision) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if len(a.decisions) >= a.maxSize {
-		a.decisions = a.decisions[1:]
-	}
-
-	a.decisions = append(a.decisions, decision)
+func (a *InMemoryAuditor) Record(record AuditRecord) {
+	a.records = append(a.records, record)
 }
 
-func (a *inMemoryAuditor) GetViolations(since time.Time) []Decision {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var violations []Decision
-	for _, d := range a.decisions {
-		if d.Timestamp.After(since) && d.Action == ActionDeny {
-			violations = append(violations, d)
+func (a *InMemoryAuditor) Query(filter AuditFilter) []AuditRecord {
+	result := make([]AuditRecord, 0)
+	for _, r := range a.records {
+		if filter.SessionID != "" && r.SessionID != filter.SessionID {
+			continue
+		}
+		if filter.ToolName != "" && r.ToolName != filter.ToolName {
+			continue
+		}
+		if filter.Action != "" && r.Decision.Action != filter.Action {
+			continue
+		}
+		if !filter.Since.IsZero() && r.Timestamp.Before(filter.Since) {
+			continue
+		}
+		result = append(result, r)
+		if filter.Limit > 0 && len(result) >= filter.Limit {
+			break
 		}
 	}
-	return violations
+	return result
 }
-
-func (a *inMemoryAuditor) GetDecisions(tool string, since time.Time) []Decision {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var results []Decision
-	for _, d := range a.decisions {
-		if d.Timestamp.After(since) && d.Tool == tool {
-			results = append(results, d)
-		}
-	}
-	return results
-}
-
-func (a *inMemoryAuditor) Close() error {
-	return nil
-}
-
-type NoOpAuditor struct{}
-
-func (a NoOpAuditor) Record(decision Decision)                             {}
-func (a NoOpAuditor) GetViolations(since time.Time) []Decision             { return nil }
-func (a NoOpAuditor) GetDecisions(tool string, since time.Time) []Decision { return nil }
-func (a NoOpAuditor) Close() error                                         { return nil }
