@@ -2,413 +2,145 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/soypete/pedro-agentware/tools"
 )
 
 type mockExecutor struct {
-	tools     []ToolDefinition
-	toolCalls map[string]int
-	failTool  string
+	execFn func(ctx context.Context, toolName string, args map[string]any) (*tools.Result, error)
 }
 
-func newMockExecutor(tools []string) *mockExecutor {
-	defs := make([]ToolDefinition, len(tools))
-	for i, t := range tools {
-		defs[i] = ToolDefinition{Name: t}
+func (m *mockExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (*tools.Result, error) {
+	if m.execFn != nil {
+		return m.execFn(ctx, toolName, args)
 	}
-	return &mockExecutor{
-		tools:     defs,
-		toolCalls: make(map[string]int),
-	}
+	return &tools.Result{Success: true}, nil
 }
 
-func (m *mockExecutor) CallTool(ctx context.Context, name string, args map[string]interface{}) (*ToolResult, error) {
-	m.toolCalls[name]++
-	if name == m.failTool {
-		return nil, errors.New("mock error")
-	}
-	return &ToolResult{Content: "ok"}, nil
+type mockEvaluator struct {
+	decision Decision
 }
 
-func (m *mockExecutor) ListTools() []ToolDefinition {
-	return m.tools
+func (m *mockEvaluator) Evaluate(toolName string, args map[string]any, caller CallerContext) Decision {
+	return m.decision
 }
 
-func TestNew(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1", "tool2"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
+type mockAuditor struct {
+	records []AuditRecord
+}
 
-	mw := New(executor, policy)
+func (m *mockAuditor) Record(record AuditRecord) {
+	m.records = append(m.records, record)
+}
+
+func (m *mockAuditor) Query(filter AuditFilter) []AuditRecord {
+	return m.records
+}
+
+func TestNewMiddleware(t *testing.T) {
+	exec := &mockExecutor{}
+	mw := NewMiddleware(exec)
 
 	if mw == nil {
-		t.Fatal("New returned nil")
-	}
-	if mw.executor != executor {
-		t.Error("executor not set correctly")
-	}
-	if mw.policy == nil {
-		t.Error("policy not set")
+		t.Fatal("expected non-nil middleware")
 	}
 }
 
-func TestMiddleware_CallTool_Allowed(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-tool1", Tools: []string{"tool1"}, Action: ActionAllow}},
-	}
+func TestMiddlewareExecute_Allow(t *testing.T) {
+	exec := &mockExecutor{}
+	eval := &mockEvaluator{decision: Decision{Action: ActionAllow, Rule: "test"}}
+	aud := &mockAuditor{}
 
-	mw := New(executor, policy)
-	result, err := mw.CallTool(context.Background(), "tool1", nil)
+	mw := NewMiddleware(exec).WithPolicy(eval).WithAuditor(aud)
 
+	result, err := mw.Execute(context.Background(), "test_tool", map[string]any{"arg": "value"})
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
-		t.Error("result should not be nil")
-	}
-}
-
-func TestMiddleware_CallTool_Denied(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules:       []Rule{{Name: "deny-tool1", Tools: []string{"tool1"}, Action: ActionDeny}},
-		DefaultDeny: false,
-	}
-
-	mw := New(executor, policy)
-	result, err := mw.CallTool(context.Background(), "tool1", nil)
-
-	if !errors.Is(err, ErrPolicyDenied) {
-		t.Errorf("expected ErrPolicyDenied, got: %v", err)
-	}
-	if result == nil {
-		t.Error("result should not be nil")
-	} else if result.Error != ErrPolicyDenied {
-		t.Errorf("expected ErrPolicyDenied in result, got: %v", result.Error)
+	if !result.Success {
+		t.Error("expected success")
 	}
 }
 
-func TestMiddleware_CallTool_NotFound(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
+func TestMiddlewareExecute_Deny(t *testing.T) {
+	exec := &mockExecutor{}
+	eval := &mockEvaluator{decision: Decision{Action: ActionDeny, Rule: "deny_rule", Reason: "not allowed"}}
+	aud := &mockAuditor{}
+
+	mw := NewMiddleware(exec).WithPolicy(eval).WithAuditor(aud)
+
+	result, err := mw.Execute(context.Background(), "test_tool", map[string]any{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	mw := New(executor, policy)
-	result, err := mw.CallTool(context.Background(), "nonexistent", nil)
-
-	if !errors.Is(err, ErrToolNotFound) {
-		t.Errorf("expected ErrToolNotFound, got: %v", err)
+	if result.Success {
+		t.Error("expected failure")
 	}
-	if result.Error != ErrToolNotFound {
-		t.Errorf("expected ErrToolNotFound in result, got: %v", result.Error)
-	}
-}
-
-func TestMiddleware_CallTool_ExecutorError(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	executor.failTool = "tool1"
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-tool1", Tools: []string{"tool1"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	result, err := mw.CallTool(context.Background(), "tool1", nil)
-
-	if err == nil {
-		t.Error("expected error from executor")
-	}
-	_ = result
-}
-
-func TestMiddleware_ListTools(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1", "tool2", "tool3"})
-	policy := Policy{
-		Rules:       []Rule{{Name: "allow-some", Tools: []string{"tool1", "tool2"}, Action: ActionAllow}},
-		DefaultDeny: true,
-	}
-
-	mw := New(executor, policy)
-	tools := mw.ListTools()
-
-	if len(tools) != 2 {
-		t.Errorf("expected 2 tools, got %d", len(tools))
+	if result.Error == "" {
+		t.Error("expected error message")
 	}
 }
 
-func TestMiddleware_ListTools_NoPolicy(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1", "tool2"})
-	policy := Policy{}
+func TestMiddlewareExecute_Filter(t *testing.T) {
+	var capturedArgs map[string]any
+	exec := &mockExecutor{
+		execFn: func(ctx context.Context, toolName string, args map[string]any) (*tools.Result, error) {
+			capturedArgs = args
+			return &tools.Result{Success: true}, nil
+		},
+	}
+	eval := &mockEvaluator{
+		decision: Decision{
+			Action:       ActionFilter,
+			Rule:         "filter_rule",
+			RedactedArgs: map[string]any{"secret": "redacted"},
+		},
+	}
 
-	mw := New(executor, policy, WithPolicyEvaluator(nil))
-	tools := mw.ListTools()
+	mw := NewMiddleware(exec).WithPolicy(eval)
 
-	if len(tools) != 2 {
-		t.Errorf("expected 2 tools, got %d", len(tools))
+	_, err := mw.Execute(context.Background(), "test_tool", map[string]any{"secret": "original"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedArgs["secret"] != "redacted" {
+		t.Errorf("expected secret to be redacted, got '%v'", capturedArgs["secret"])
 	}
 }
 
-func TestMiddleware_GetAuditor(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	auditor := NewInMemoryAuditor(100)
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
+func TestMiddlewareAuditorRecords(t *testing.T) {
+	exec := &mockExecutor{}
+	eval := &mockEvaluator{decision: Decision{Action: ActionAllow, Rule: "test"}}
+	aud := &mockAuditor{}
+
+	mw := NewMiddleware(exec).WithPolicy(eval).WithAuditor(aud)
+
+	_, err := mw.Execute(context.Background(), "my_tool", map[string]any{})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
 	}
 
-	mw := New(executor, policy, WithAuditor(auditor))
-	if mw.GetAuditor() != auditor {
-		t.Error("GetAuditor returned wrong auditor")
+	if len(aud.records) != 1 {
+		t.Fatalf("expected 1 audit record, got %d", len(aud.records))
 	}
-}
-
-func TestMiddleware_GetPolicy(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	if mw.GetPolicy() == nil {
-		t.Error("GetPolicy returned nil")
-	}
-}
-
-func TestExtractCallerContext(t *testing.T) {
-	ctx := context.Background()
-
-	cc := extractCallerContext(ctx)
-	if cc.Role != "" || cc.UserID != "" || cc.SessionID != "" {
-		t.Error("expected empty CallerContext for nil context")
-	}
-
-	cc = extractCallerContext(context.TODO())
-	if cc.Role != "" || cc.UserID != "" || cc.SessionID != "" {
-		t.Error("expected empty CallerContext for nil ctx")
-	}
-
-	callerCtx := CallerContext{Role: "admin", SessionID: "sess1"}
-	ctx = WithCallerContext(context.Background(), callerCtx)
-	cc = extractCallerContext(ctx)
-	if cc.Role != "admin" {
-		t.Errorf("expected role admin, got %s", cc.Role)
-	}
-	if cc.SessionID != "sess1" {
-		t.Errorf("expected session sess1, got %s", cc.SessionID)
+	if aud.records[0].ToolName != "my_tool" {
+		t.Errorf("expected tool name 'my_tool', got '%s'", aud.records[0].ToolName)
 	}
 }
 
 func TestWithCallerContext(t *testing.T) {
-	ctx := context.Background()
-	callerCtx := CallerContext{Role: "admin"}
-
-	newCtx := WithCallerContext(ctx, callerCtx)
-	extracted := extractCallerContext(newCtx)
-
-	if extracted.Role != "admin" {
-		t.Errorf("expected admin, got %s", extracted.Role)
-	}
-}
-
-func TestMergeMetadata(t *testing.T) {
-	a := map[string]interface{}{"a": 1}
-	b := map[string]interface{}{"b": 2}
-
-	result := mergeMetadata(a, b)
-	if result["a"] != 1 {
-		t.Error("a not preserved")
-	}
-	if result["b"] != 2 {
-		t.Error("b not added")
+	caller := CallerContext{
+		UserID:    "user123",
+		SessionID: "session456",
+		Role:      "admin",
 	}
 
-	result = mergeMetadata(nil, b)
-	if result["b"] != 2 {
-		t.Error("b not added to nil map")
-	}
-}
+	ctx := WithCallerContext(context.Background(), caller)
 
-func TestCallHistory_RecordToolCall(t *testing.T) {
-	ch := NewCallHistory()
-
-	ch.RecordToolCall("tool1", true)
-	if !ch.WasToolCalled("tool1") {
-		t.Error("tool1 should be marked as called")
-	}
-
-	ch.RecordToolCall("tool2", false)
-	if ch.WasToolCalled("tool2") {
-		t.Error("tool2 should not be marked as called on failure")
-	}
-
-	failed := ch.GetFailedTools()
-	if failed["tool2"] != 1 {
-		t.Errorf("expected tool2 failure count 1, got %d", failed["tool2"])
-	}
-}
-
-func TestCallHistory_FailureTracking(t *testing.T) {
-	ch := NewCallHistory()
-
-	ch.RecordToolCall("tool1", false)
-	ch.RecordToolCall("tool1", false)
-	ch.RecordToolCall("tool1", false)
-
-	if !ch.HasToolFailedTooManyTimes("tool1") {
-		t.Error("tool1 should be marked as failed too many times after 3 failures")
-	}
-
-	ch.RecordToolCall("tool1", true)
-	if ch.HasToolFailedTooManyTimes("tool1") {
-		t.Error("tool1 should be cleared after success")
-	}
-}
-
-func TestCallHistory_Reset(t *testing.T) {
-	ch := NewCallHistory()
-
-	ch.RecordToolCall("tool1", true)
-	ch.RecordToolCall("tool2", false)
-
-	ch.Reset()
-
-	if ch.WasToolCalled("tool1") {
-		t.Error("tool1 should be cleared after reset")
-	}
-	if ch.GetFailedTools()["tool2"] != 0 {
-		t.Error("tool2 failures should be cleared after reset")
-	}
-}
-
-func TestMiddleware_CallHistory_RecordsSuccess(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-tool1", Tools: []string{"tool1"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	_, _ = mw.CallTool(context.Background(), "tool1", nil)
-
-	history := mw.GetCallHistory()
-	if !history.WasToolCalled("tool1") {
-		t.Error("tool1 should be recorded as called")
-	}
-}
-
-func TestMiddleware_CallHistory_RecordsFailure(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	executor.failTool = "tool1"
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-tool1", Tools: []string{"tool1"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	_, _ = mw.CallTool(context.Background(), "tool1", nil)
-
-	history := mw.GetCallHistory()
-	failed := history.GetFailedTools()
-	if failed["tool1"] != 1 {
-		t.Errorf("expected tool1 failure count 1, got %d", failed["tool1"])
-	}
-}
-
-func TestMiddleware_CallHistory_BlocksAfter3Failures(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	executor.failTool = "tool1"
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-tool1", Tools: []string{"tool1"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-
-	for i := 0; i < 3; i++ {
-		_, _ = mw.CallTool(context.Background(), "tool1", nil)
-	}
-
-	tools := mw.ListTools()
-	found := false
-	for _, t := range tools {
-		if t.Name == "tool1" {
-			found = true
-			break
-		}
-	}
-	if found {
-		t.Error("tool1 should be filtered out after 3 failures")
-	}
-}
-
-func TestMiddleware_GetCallHistory(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	history := mw.GetCallHistory()
-
-	if history == nil {
-		t.Error("GetCallHistory returned nil")
-	}
-}
-
-func TestMiddleware_GetToolsWithContext_NoPhase(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1", "tool2"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-	tools := mw.GetToolsWithContext(context.Background())
-
-	if len(tools) != 2 {
-		t.Errorf("expected 2 tools, got %d", len(tools))
-	}
-}
-
-func TestMiddleware_GetToolsForPhase_TracksPerPhase(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1"})
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-
-	tools := mw.GetToolsForPhase("phase1", CallerContext{})
-	if len(tools) != 1 {
-		t.Errorf("expected 1 tool, got %d", len(tools))
-	}
-
-	_, _ = mw.CallTool(WithCallerContext(context.Background(), CallerContext{Phase: "phase1"}), "tool1", nil)
-
-	tools = mw.GetToolsForPhase("phase1", CallerContext{})
-	if len(tools) != 0 {
-		t.Errorf("expected 0 tools after calling, got %d", len(tools))
-	}
-
-	tools = mw.GetToolsForPhase("phase2", CallerContext{})
-	if len(tools) != 1 {
-		t.Errorf("expected 1 tool in phase2 (different phase), got %d", len(tools))
-	}
-}
-
-func TestMiddleware_GetToolsForPhase_FiltersFailed(t *testing.T) {
-	executor := newMockExecutor([]string{"tool1", "tool2"})
-	executor.failTool = "tool2"
-	policy := Policy{
-		Rules: []Rule{{Name: "allow-all", Tools: []string{"*"}, Action: ActionAllow}},
-	}
-
-	mw := New(executor, policy)
-
-	_, _ = mw.CallTool(context.Background(), "tool2", nil)
-	_, _ = mw.CallTool(context.Background(), "tool2", nil)
-	_, _ = mw.CallTool(context.Background(), "tool2", nil)
-
-	tools := mw.GetToolsForPhase("phase1", CallerContext{})
-	if len(tools) != 1 {
-		t.Errorf("expected 1 tool (tool1), got %d", len(tools))
+	if c, ok := ctx.Value(callerContextKey).(CallerContext); !ok {
+		t.Error("expected CallerContext in context")
+	} else if c.UserID != "user123" {
+		t.Errorf("expected UserID 'user123', got '%s'", c.UserID)
 	}
 }

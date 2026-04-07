@@ -5,124 +5,49 @@ import (
 	"time"
 )
 
-func TestDecision_IsAllowed(t *testing.T) {
-	tests := []struct {
-		name     string
-		action   Action
-		expected bool
-	}{
-		{"allow action returns true", ActionAllow, true},
-		{"deny action returns false", ActionDeny, false},
-		{"filter action returns false", ActionFilter, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := Decision{Action: tt.action}
-			if got := d.IsAllowed(); got != tt.expected {
-				t.Errorf("IsAllowed() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestDecision_IsDenied(t *testing.T) {
-	tests := []struct {
-		name     string
-		action   Action
-		expected bool
-	}{
-		{"allow action returns false", ActionAllow, false},
-		{"deny action returns true", ActionDeny, true},
-		{"filter action returns false", ActionFilter, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := Decision{Action: tt.action}
-			if got := d.IsDenied(); got != tt.expected {
-				t.Errorf("IsDenied() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestDecision_IsFiltered(t *testing.T) {
-	tests := []struct {
-		name     string
-		action   Action
-		expected bool
-	}{
-		{"allow action returns false", ActionAllow, false},
-		{"deny action returns false", ActionDeny, false},
-		{"filter action returns true", ActionFilter, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := Decision{Action: tt.action}
-			if got := d.IsFiltered(); got != tt.expected {
-				t.Errorf("IsFiltered() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestCallerContext(t *testing.T) {
 	ctx := CallerContext{
-		Trusted:   true,
-		Role:      "admin",
 		UserID:    "user123",
 		SessionID: "session456",
+		Role:      "admin",
 		Source:    "cli",
-		Metadata:  map[string]interface{}{"key": "value"},
+		Trusted:   true,
+		Metadata:  map[string]string{"key": "value"},
 	}
 
+	if ctx.UserID != "user123" {
+		t.Errorf("expected UserID 'user123', got '%s'", ctx.UserID)
+	}
 	if ctx.Trusted != true {
-		t.Error("Trusted should be true")
-	}
-	if ctx.Role != "admin" {
-		t.Error("Role should be admin")
+		t.Error("expected Trusted to be true")
 	}
 }
 
-func TestToolResult(t *testing.T) {
-	result := ToolResult{
-		Content:  "test content",
-		Error:    nil,
-		IsStream: false,
-		Metadata: map[string]interface{}{"foo": "bar"},
+func TestDecision(t *testing.T) {
+	decision := Decision{
+		Action:       ActionAllow,
+		Rule:         "test_rule",
+		Reason:       "matched test rule",
+		RedactedArgs: map[string]any{"secret": "redacted"},
+		Timestamp:    time.Now(),
 	}
 
-	if result.Content != "test content" {
-		t.Error("Content mismatch")
+	if decision.Action != ActionAllow {
+		t.Errorf("expected ActionAllow, got '%s'", decision.Action)
 	}
-	if result.Error != nil {
-		t.Error("Error should be nil")
+	if decision.Rule != "test_rule" {
+		t.Errorf("expected Rule 'test_rule', got '%s'", decision.Rule)
 	}
 }
 
-func TestToolDefinition(t *testing.T) {
-	def := ToolDefinition{
-		Name:        "test_tool",
-		Description: "A test tool",
-		InputSchema: map[string]interface{}{"type": "object"},
+func TestActionConstants(t *testing.T) {
+	if ActionAllow != "allow" {
+		t.Errorf("expected 'allow', got '%s'", ActionAllow)
 	}
-
-	if def.Name != "test_tool" {
-		t.Error("Name mismatch")
+	if ActionDeny != "deny" {
+		t.Errorf("expected 'deny', got '%s'", ActionDeny)
 	}
-}
-
-func TestDecision_Timestamp(t *testing.T) {
-	now := time.Now()
-	d := Decision{
-		Timestamp: now,
-		Tool:      "test",
-		Action:    ActionAllow,
-	}
-
-	if !d.Timestamp.Equal(now) {
-		t.Error("Timestamp mismatch")
+	if ActionFilter != "filter" {
+		t.Errorf("expected 'filter', got '%s'", ActionFilter)
 	}
 }

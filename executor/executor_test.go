@@ -1,0 +1,113 @@
+package executor
+
+import (
+	"testing"
+
+	"github.com/soypete/pedro-agentware/llm"
+	"github.com/soypete/pedro-agentware/middleware"
+)
+
+func TestTerminationReasonConstants(t *testing.T) {
+	if TerminationComplete != "complete" {
+		t.Errorf("expected 'complete', got '%s'", TerminationComplete)
+	}
+	if TerminationMaxIterations != "max_iterations" {
+		t.Errorf("expected 'max_iterations', got '%s'", TerminationMaxIterations)
+	}
+	if TerminationError != "error" {
+		t.Errorf("expected 'error', got '%s'", TerminationError)
+	}
+	if TerminationCanceled != "canceled" {
+		t.Errorf("expected 'canceled', got '%s'", TerminationCanceled)
+	}
+}
+
+func TestExecuteRequest(t *testing.T) {
+	req := ExecuteRequest{
+		SystemPrompt:  "You are a helpful assistant",
+		UserMessage:   "Do something useful",
+		History:       []llm.Message{{Role: llm.RoleUser, Content: "hello"}},
+		MaxIterations: 10,
+		CallerCtx:     middleware.CallerContext{UserID: "user123"},
+		JobID:         "job_abc",
+	}
+
+	if req.SystemPrompt != "You are a helpful assistant" {
+		t.Errorf("expected system prompt, got '%s'", req.SystemPrompt)
+	}
+	if req.UserMessage != "Do something useful" {
+		t.Errorf("expected user message, got '%s'", req.UserMessage)
+	}
+	if len(req.History) != 1 {
+		t.Errorf("expected 1 history message, got %d", len(req.History))
+	}
+	if req.MaxIterations != 10 {
+		t.Errorf("expected 10, got %d", req.MaxIterations)
+	}
+	if req.CallerCtx.UserID != "user123" {
+		t.Errorf("expected UserID 'user123', got '%s'", req.CallerCtx.UserID)
+	}
+	if req.JobID != "job_abc" {
+		t.Errorf("expected JobID 'job_abc', got '%s'", req.JobID)
+	}
+}
+
+func TestExecuteResult(t *testing.T) {
+	result := ExecuteResult{
+		FinalResponse:     "Task completed successfully",
+		Iterations:        5,
+		ToolCallsMade:     3,
+		TerminationReason: TerminationComplete,
+		Conversation:      []llm.Message{{Role: llm.RoleAssistant, Content: "Done"}},
+	}
+
+	if result.FinalResponse != "Task completed successfully" {
+		t.Errorf("expected final response, got '%s'", result.FinalResponse)
+	}
+	if result.Iterations != 5 {
+		t.Errorf("expected 5, got %d", result.Iterations)
+	}
+	if result.ToolCallsMade != 3 {
+		t.Errorf("expected 3, got %d", result.ToolCallsMade)
+	}
+	if result.TerminationReason != TerminationComplete {
+		t.Errorf("expected TerminationComplete, got '%s'", result.TerminationReason)
+	}
+	if len(result.Conversation) != 1 {
+		t.Errorf("expected 1 conversation message, got %d", len(result.Conversation))
+	}
+}
+
+func TestInferenceExecutorConfig(t *testing.T) {
+	cfg := InferenceExecutorConfig{
+		MaxIterations:    15,
+		CompletionSignal: "DONE",
+	}
+
+	if cfg.MaxIterations != 15 {
+		t.Errorf("expected 15, got %d", cfg.MaxIterations)
+	}
+	if cfg.CompletionSignal != "DONE" {
+		t.Errorf("expected 'DONE', got '%s'", cfg.CompletionSignal)
+	}
+}
+
+func TestNewInferenceExecutor_Defaults(t *testing.T) {
+	cfg := InferenceExecutorConfig{
+		MaxIterations: 0,
+	}
+
+	exec := NewInferenceExecutor(cfg)
+	if exec == nil {
+		t.Fatal("expected non-nil executor")
+	}
+}
+
+func TestNewInferenceExecutor_SetsDefaults(t *testing.T) {
+	cfg := InferenceExecutorConfig{}
+	exec := NewInferenceExecutor(cfg)
+
+	if exec == nil {
+		t.Fatal("expected non-nil executor")
+	}
+}
