@@ -14,13 +14,13 @@ help:
 	@echo "  --base-url         - Override base URL via CLI"
 
 evals:
-	python3 -m testing.evals.main --all --models gpt-oss-20b,qwen3-coder-30b
+	python3 -m testing.evals.main --all --models nemotron-3-super-120b
 
 evals-file-search:
-	python3 -m testing.evals.main --file-search --models gpt-oss-20b,qwen3-coder-30b
+	python3 -m testing.evals.main --file-search --models nemotron-3-super-120b
 
 evals-general:
-	python3 -m testing.evals.main --general --models gpt-oss-20b,qwen3-coder-30b
+	python3 -m testing.evals.main --general --models nemotron-3-super-120b
 
 evals-clean:
 	rm -rf testing/evals/output/*.json
