@@ -5,12 +5,12 @@ import sys
 sys.path.insert(0, "src")
 
 from pedro_agentware.middleware import (
+    MiddlewareImpl,
     Action,
     CallerContext,
-    InMemoryAuditor,
-    MiddlewareImpl,
     Policy,
     Rule,
+    InMemoryAuditor,
     SimplePolicyEvaluator,
 )
 from pedro_agentware.middleware.policy import Condition, Operator
