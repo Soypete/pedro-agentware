@@ -14,8 +14,8 @@ import (
     "fmt"
     "time"
 
-    "github.com/soypete/pedro-agentware/middleware"
-    "github.com/soypete/pedro-agentware/middleware/types"
+    "github.com/soypete/pedro-agentware/go/middleware"
+    "github.com/soypete/pedro-agentware/go/middleware/types"
 )
 
 func main() {

@@ -1,0 +1,39 @@
+name: TypeScript Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/typescript-test.yml'
+
+jobs:
+  typescript-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: |
+          cd typescript
+          npm ci
+      - name: Run TypeScript lint
+        run: |
+          cd typescript
+          npm run lint
+      - name: Run TypeScript build
+        run: |
+          cd typescript
+          npm run build
+      - name: Run TypeScript tests
+        run: |
+          cd typescript
+          npm test
