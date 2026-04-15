@@ -1,9 +1,10 @@
 """Tests for tools package."""
 
 import sys
+
 sys.path.insert(0, "src")
 
-from pedro_agentware.tools import Tool, Result, BaseTool, ToolRegistry
+from pedro_agentware.tools import BaseTool, Result, ToolRegistry
 
 
 class AddTool(BaseTool):

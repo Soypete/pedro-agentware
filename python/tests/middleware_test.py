@@ -1,16 +1,16 @@
 """Tests for middleware package."""
 
 import sys
+
 sys.path.insert(0, "src")
 
 from pedro_agentware.middleware import (
-    MiddlewareImpl,
     Action,
     CallerContext,
-    Decision,
+    InMemoryAuditor,
+    MiddlewareImpl,
     Policy,
     Rule,
-    InMemoryAuditor,
     SimplePolicyEvaluator,
 )
 from pedro_agentware.middleware.policy import Condition, Operator
@@ -18,7 +18,7 @@ from pedro_agentware.middleware.policy import Condition, Operator
 
 class MockExecutor:
     """Mock executor that returns success."""
-    
+
     def execute(self, tool_name: str, args: dict):
         return ({"result": f"executed {tool_name}"}, True, "")
 
