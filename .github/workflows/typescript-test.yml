@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd typescript
-          npm ci
+          npm install
       - name: Run TypeScript lint
         run: |
           cd typescript
