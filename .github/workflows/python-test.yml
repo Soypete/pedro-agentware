@@ -1,0 +1,35 @@
+name: Python Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'python/**'
+      - '.github/workflows/python-test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'python/**'
+      - '.github/workflows/python-test.yml'
+
+jobs:
+  python-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          cd python
+          pip install -e ".[dev]"
+      - name: Run Python lint
+        run: |
+          cd python
+          ruff check src/
+          mypy src/
+      - name: Run Python tests
+        run: |
+          cd python
+          pytest tests/ --cov=src/pedro_agentware --cov-report=xml
