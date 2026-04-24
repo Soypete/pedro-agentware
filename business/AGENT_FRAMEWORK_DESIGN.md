@@ -431,17 +431,69 @@ LangGraph's killer feature is human-in-the-loop. Without it:
 
 ---
 
+## Existing Patterns in PedroCLI
+
+The `pedro-agentware/go` module already has components that can be leveraged or adapted. Additionally, PedroCLI has a mature agent harness system in `pkg/agents/`:
+
+### What PedroCLI Has (Extract/Adapt)
+
+| Component | Location | What It Does | Framework Opportunity |
+|-----------|----------|-------------|----------------------|
+| **BaseAgent** | `pkg/agents/base.go` | Common agent base with tools, registry, system prompts | Extract as `agent.Agent` base type |
+| **InferenceExecutor** | `pkg/agents/executor.go` | Single-phase inference loop with tool calls | Adapt as `LinearRunner` |
+| **PhasedExecutor** | `pkg/agents/phased_executor.go` | Multi-phase workflows with per-phase tool subsets, validators | This IS a graph-like pattern! |
+| **Phase** | `pkg/agents/phased_executor.go:23` | `Name`, `SystemPrompt`, `Tools[]`, `MaxRounds`, `Validator` | Already a node definition |
+| **ProgressCallback** | `pkg/agents/executor.go:42` | Event streaming during execution | Use for runner state updates |
+| **SubagentManager** | `pkg/orchestration/` | Spawns parallel subagents | Supports parallel node execution |
+| **ArtifactStore** | `pkg/artifacts/` | Passes data between phases | Used for state passing between nodes |
+| **JobManager** | `pkg/jobs/` | Async job execution with state | Checkpointer can use this |
+| **ModeConstraints** | `pkg/agents/mode_constraints.go` | Per-mode tool restrictions | Policy-based tool filtering |
+| **ContextManager** | `pkg/llmcontext/` | Conversation history management | State/history persistence |
+
+### What's Missing from PedroCLI
+
+1. **Generic State** - Currently uses `map[string]interface{}`; need typed `State[T]`
+2. **Explicit Graph** - PhasedExecutor is sequential, not a DAG; need graph builder
+3. **Conditional Edges** - Phases are linear; need router nodes
+4. **State Reducers** - Artifacts pass data but no merge/reduce logic
+5. **Checkpointer** - Jobs are persisted but not graph state checkpoints
+6. **Interrupts** - No human-in-the-loop support
+
+### What To Extract
+
+```go
+// From PedroCLI's agents package → go/agent
+
+// 1. Agent interface (already exists in base.go)
+// Current: Agent interface with Execute()
+// New: Add state type parameter
+
+// 2. PhasedExecutor → Graph Runner
+// Current: Sequential phases with tool subsets
+// New: Graph with nodes + edges
+
+// 3. Phase → Node
+// Current: Phase{ Name, SystemPrompt, Tools, MaxRounds, Validator }
+// New: NodeFunc[T] with config
+
+// 4. ProgressCallback → StateUpdate channel
+// Current: ProgressEvent{ Type, Message, Data }
+// New: StateUpdate[T]{ Node, State, IsDelta }
+```
+
 ## Comparison to LangGraph
 
-| Feature | LangGraph (Python) | This Framework (Go) |
-|---------|-------------------|---------------------|
-| State | `dict` (map) | `State[T]` generic |
-| Nodes | Functions | `NodeFunc[T]` |
-| Edges | Strings | Strings + Conditionals |
-| Checkpointer | Optional | Pluggable interface |
-| Interrupts | Yes | Yes |
-| Time Travel | Yes | Via checkpointer |
-| Streaming | Yes | Via channel |
+| Feature | LangGraph (Python) | This Framework (Go) | PedroCLI Has |
+|---------|-------------------|---------------------|--------------|
+| State | `dict` (map) | `State[T]` generic | `map[string]interface{}` (partial) |
+| Nodes | Functions | `NodeFunc[T]` | `Phase` (sequential only) |
+| Edges | Strings | Strings + Conditionals | Sequential phases |
+| Checkpointer | Optional | Pluggable interface | JobManager (partial) |
+| Interrupts | Yes | Yes | No |
+| Time Travel | Yes | Via checkpointer | No |
+| Streaming | Yes | Via channel | ProgressCallback |
+| Subagents | Yes | Via SubagentSpawner | SubagentManager |
+| Phases | Yes | Via Graph | PhasedExecutor |
 
 ---
 
@@ -454,6 +506,47 @@ LangGraph's killer feature is human-in-the-loop. Without it:
 5. **Timeout handling** - Per-node and global timeouts
 6. **Observability** - Tracing integration for debugging
 7. **MCP integration** - Graph exposed as MCP server for Python/TS clients
+
+---
+
+## Implementation Strategy
+
+Given the existing PedroCLI patterns, the implementation should be incremental:
+
+### Phase 1: Core Abstractions (Minimal)
+
+Focus on the graph model itself, reusing existing execution patterns:
+
+```go
+go/agent/
+├── state.go           // State[T] with reducers
+├── node.go            // NodeFunc[T], NodeResult
+├── graph.go           // Graph builder
+└── runner.go          // Simple sequential runner
+```
+
+Key decisions:
+- **Don't rewrite InferenceExecutor** - Adapt it as the default runner
+- **Keep PhasedExecutor** - It's already a valid workflow pattern, just add graph support
+- **Add state typing** - Wrap `map[string]interface{}` with generics
+
+### Phase 2: Adapters for PedroCLI
+
+Create adapters to use the framework within PedroCLI:
+
+```go
+go/agent/
+├── adapters/
+│   ├── executor.go    // Wrap InferenceExecutor as Runner
+│   └── phased.go      // Wrap PhasedExecutor as Graph
+```
+
+### Phase 3: Graph Features
+
+Add what's missing from LangGraph:
+- Conditional edges
+- Checkpointer
+- Interrupts
 
 ---
 
