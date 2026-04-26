@@ -49,8 +49,18 @@ export class MiddlewareImpl implements Middleware {
       return [null, false, `denied by policy: ${decision.reason}`];
     }
 
-    if (decision.action === Action.FILTER && decision.redacted_args) {
-      args = { ...args, ...decision.redacted_args };
+    if (decision.action === Action.FILTER) {
+      const redactFields = typeof decision.redacted_args === 'object' && decision.redacted_args !== null
+        ? Object.keys(decision.redacted_args)
+        : [];
+      if (redactFields.length > 0) {
+        args = { ...args };
+        for (const field of redactFields) {
+          if (field in args) {
+            (args as Record<string, unknown>)[field] = "[REDACTED]";
+          }
+        }
+      }
     }
 
     return this.executor.execute(toolName, args);

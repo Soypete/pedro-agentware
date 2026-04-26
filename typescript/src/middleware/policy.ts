@@ -47,11 +47,22 @@ export class SimplePolicyEvaluator implements PolicyEvaluator {
     for (const rule of this.policy.rules) {
       if (!this.ruleMatchesTool(rule, toolName)) continue;
       if (!this.evaluateConditions(rule.conditions || [], args, caller)) continue;
+      
+      const redacted_args: Record<string, unknown> = {};
+      if (rule.redact_fields) {
+        for (const field of rule.redact_fields) {
+          if (field in args) {
+            redacted_args[field] = true;
+          }
+        }
+      }
+      
       return {
         action: rule.action,
         rule: rule.name,
         reason: `matched rule ${rule.name}`,
         timestamp: new Date(),
+        redacted_args: Object.keys(redacted_args).length > 0 ? redacted_args : undefined,
       };
     }
 
