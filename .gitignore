@@ -2,6 +2,7 @@
 .pytest_cache/
 .ruff_cache/
 .venv/
+node_modules/
 dist/
 build/
 *.egg-info/
