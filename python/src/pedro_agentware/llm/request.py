@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .response import ToolCall
 
+from pedro_agentware.middleware.types import MessageMeta
+
 
 class Role(str, Enum):
     """Message role."""
@@ -25,6 +27,7 @@ class Message:
     content: str = ""
     tool_call_id: str = ""
     tool_calls: list["ToolCall"] = field(default_factory=list)
+    meta: MessageMeta = field(default_factory=MessageMeta)
 
 
 @dataclass

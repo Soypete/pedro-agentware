@@ -6,6 +6,32 @@ from enum import Enum
 from typing import Any
 
 
+class MessageType(str, Enum):
+    """Semantic type of a message for smart compaction and guardrails."""
+
+    SYSTEM_PROMPT = "system_prompt"
+    USER_INPUT = "user_input"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    REASONING = "reasoning"
+    TEXT_RESPONSE = "text_response"
+    STEP_NUDGE = "step_nudge"
+    PREREQUISITE_NUDGE = "prerequisite_nudge"
+    RETRY_NUDGE = "retry_nudge"
+    CONTEXT_WARNING = "context_warning"
+    SUMMARY = "summary"
+
+
+@dataclass(frozen=True)
+class MessageMeta:
+    """Metadata for a message used in smart compaction and guardrails."""
+
+    type: MessageType = MessageType.USER_INPUT
+    step_index: int | None = None
+    original_type: MessageType | None = None
+    token_estimate: int | None = None
+
+
 class Action(str, Enum):
     """Action to take on a tool call."""
 
