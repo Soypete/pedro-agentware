@@ -1,4 +1,5 @@
 import type { ToolCall } from "./response.js";
+import type { MessageMeta } from "../middleware/types.js";
 
 export enum Role {
   SYSTEM = "system",
@@ -12,6 +13,7 @@ export interface Message {
   content: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
+  meta?: MessageMeta;
 }
 
 export interface ToolDefinition {

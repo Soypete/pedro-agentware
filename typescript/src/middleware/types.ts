@@ -1,3 +1,24 @@
+export enum MessageType {
+  SYSTEM_PROMPT = "system_prompt",
+  USER_INPUT = "user_input",
+  TOOL_CALL = "tool_call",
+  TOOL_RESULT = "tool_result",
+  REASONING = "reasoning",
+  TEXT_RESPONSE = "text_response",
+  STEP_NUDGE = "step_nudge",
+  PREREQUISITE_NUDGE = "prerequisite_nudge",
+  RETRY_NUDGE = "retry_nudge",
+  CONTEXT_WARNING = "context_warning",
+  SUMMARY = "summary",
+}
+
+export interface MessageMeta {
+  type: MessageType;
+  step_index?: number;
+  original_type?: MessageType;
+  token_estimate?: number;
+}
+
 export enum Action {
   ALLOW = "allow",
   DENY = "deny",
