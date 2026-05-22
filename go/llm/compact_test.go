@@ -4,14 +4,6 @@ import (
 	"testing"
 )
 
-func ptrToInt(i int) *int {
-	return &i
-}
-
-func ptrToMessageType(t MessageType) *MessageType {
-	return &t
-}
-
 func TestTieredCompact_Name(t *testing.T) {
 	compact := NewTieredCompact()
 	if compact.Name() != "TieredCompact" {
