@@ -1,4 +1,4 @@
-import { Message, Role } from "../llm/request.js";
+import { Message } from "../llm/request.js";
 import { MessageType } from "../middleware/types.js";
 
 export type TokenCounter = (messages: Message[]) => number;
