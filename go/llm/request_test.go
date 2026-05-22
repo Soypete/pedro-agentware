@@ -88,3 +88,101 @@ func TestToolDefinition(t *testing.T) {
 		t.Errorf("expected 'object', got '%v'", def.InputSchema["type"])
 	}
 }
+
+func TestMessageTypeConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{"MessageTypeSystemPrompt", "system_prompt"},
+		{"MessageTypeUserInput", "user_input"},
+		{"MessageTypeToolCall", "tool_call"},
+		{"MessageTypeToolResult", "tool_result"},
+		{"MessageTypeReasoning", "reasoning"},
+		{"MessageTypeTextResponse", "text_response"},
+		{"MessageTypeStepNudge", "step_nudge"},
+		{"MessageTypePrerequisiteNudge", "prerequisite_nudge"},
+		{"MessageTypeRetryNudge", "retry_nudge"},
+		{"MessageTypeContextWarning", "context_warning"},
+		{"MessageTypeSummary", "summary"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mt MessageType
+			switch tt.name {
+			case "MessageTypeSystemPrompt":
+				mt = MessageTypeSystemPrompt
+			case "MessageTypeUserInput":
+				mt = MessageTypeUserInput
+			case "MessageTypeToolCall":
+				mt = MessageTypeToolCall
+			case "MessageTypeToolResult":
+				mt = MessageTypeToolResult
+			case "MessageTypeReasoning":
+				mt = MessageTypeReasoning
+			case "MessageTypeTextResponse":
+				mt = MessageTypeTextResponse
+			case "MessageTypeStepNudge":
+				mt = MessageTypeStepNudge
+			case "MessageTypePrerequisiteNudge":
+				mt = MessageTypePrerequisiteNudge
+			case "MessageTypeRetryNudge":
+				mt = MessageTypeRetryNudge
+			case "MessageTypeContextWarning":
+				mt = MessageTypeContextWarning
+			case "MessageTypeSummary":
+				mt = MessageTypeSummary
+			}
+			if string(mt) != tt.expected {
+				t.Errorf("expected '%s', got '%s'", tt.expected, mt)
+			}
+		})
+	}
+}
+
+func TestMessageMeta(t *testing.T) {
+	stepIndex := 1
+	originalType := MessageTypeToolCall
+	tokenEstimate := 150
+
+	meta := MessageMeta{
+		Type:          MessageTypeToolResult,
+		StepIndex:     &stepIndex,
+		OriginalType:  &originalType,
+		TokenEstimate: &tokenEstimate,
+	}
+
+	if meta.Type != MessageTypeToolResult {
+		t.Errorf("expected MessageTypeToolResult, got '%s'", meta.Type)
+	}
+	if *meta.StepIndex != 1 {
+		t.Errorf("expected StepIndex 1, got %d", *meta.StepIndex)
+	}
+	if *meta.OriginalType != MessageTypeToolCall {
+		t.Errorf("expected OriginalType ToolCall, got '%s'", *meta.OriginalType)
+	}
+	if *meta.TokenEstimate != 150 {
+		t.Errorf("expected TokenEstimate 150, got %d", *meta.TokenEstimate)
+	}
+}
+
+func TestMessageMetaZeroValue(t *testing.T) {
+	msg := Message{
+		Role:    RoleUser,
+		Content: "Hello",
+	}
+
+	if msg.Meta.Type != "" {
+		t.Errorf("expected empty MessageType, got '%s'", msg.Meta.Type)
+	}
+	if msg.Meta.StepIndex != nil {
+		t.Errorf("expected nil StepIndex, got '%v'", msg.Meta.StepIndex)
+	}
+	if msg.Meta.OriginalType != nil {
+		t.Errorf("expected nil OriginalType, got '%v'", msg.Meta.OriginalType)
+	}
+	if msg.Meta.TokenEstimate != nil {
+		t.Errorf("expected nil TokenEstimate, got '%v'", msg.Meta.TokenEstimate)
+	}
+}
