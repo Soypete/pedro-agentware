@@ -9,3 +9,7 @@ export {
   TokenCounter,
   findEligibleEnd,
 } from "./strategies.js";
+export {
+  ContextWindowManager,
+  defaultCounter,
+} from "./context_window.js";
