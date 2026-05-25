@@ -10,11 +10,10 @@ import (
 )
 
 type mockBackend struct {
-	resp         *llm.Response
-	respOnRetry  *llm.Response
-	callCount    int
-	err          error
-	returnOnCall int
+	resp        *llm.Response
+	respOnRetry *llm.Response
+	callCount   int
+	err         error
 }
 
 func (m *mockBackend) Complete(ctx context.Context, req *llm.Request) (*llm.Response, error) {
