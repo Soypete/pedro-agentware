@@ -23,6 +23,7 @@ function isNudgeType(msgType: MessageType): boolean {
 export class TieredCompact implements CompactionStrategy {
   private keepRecent: number;
   private truncateChars: number;
+  public lastPhase: number = 0;
 
   constructor(keepRecent = 2, truncateChars = 200) {
     this.keepRecent = keepRecent;
@@ -38,6 +39,8 @@ export class TieredCompact implements CompactionStrategy {
     targetTokens: number,
     counter: TokenCounter
   ): Message[] {
+    this.lastPhase = 0;
+
     if (!messages || messages.length === 0) {
       return [];
     }
@@ -54,17 +57,21 @@ export class TieredCompact implements CompactionStrategy {
 
     const phase1Result = this.phase1Compact(result, eligibleEnd, counter);
     currentTokens = counter(phase1Result);
+    this.lastPhase = 1;
     if (currentTokens <= targetTokens) {
       return phase1Result;
     }
 
     const phase2Result = this.phase2Compact(phase1Result, eligibleEnd, counter);
     currentTokens = counter(phase2Result);
+    this.lastPhase = 2;
     if (currentTokens <= targetTokens) {
       return phase2Result;
     }
 
-    return this.phase3Compact(phase2Result, eligibleEnd, counter);
+    const phase3Result = this.phase3Compact(phase2Result, eligibleEnd, counter);
+    this.lastPhase = 3;
+    return phase3Result;
   }
 
   private protectedSteps(

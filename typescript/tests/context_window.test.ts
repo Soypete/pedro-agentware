@@ -1,6 +1,7 @@
 import { describe, it, expect } from "@jest/globals";
 import { Message, Role } from "../src/llm/request.js";
 import {
+  CompactEvent,
   ContextWindowManager,
   defaultCounter,
   defaultContextWarning,
@@ -215,5 +216,78 @@ describe("ContextWindowManager_ThreadSafety_CheckThresholds", () => {
     const results = await Promise.all(calls);
     const nonNull = results.filter((r) => r !== null).length;
     expect(nonNull).toBeGreaterThan(0);
+  });
+});
+
+describe("CompactEvent", () => {
+  it("fires on compact when callback provided", () => {
+    const receivedEvents: CompactEvent[] = [];
+    const onCompact = (event: CompactEvent) => receivedEvents.push(event);
+
+    const mgr = new ContextWindowManager(1000, defaultCounter, null, null, null, onCompact);
+    mgr.setCompactionRatio(0.5);
+
+    const messages = Array.from({ length: 10 }, (_, i) => ({
+      role: Role.USER,
+      content: "Message " + i + ": " + "x".repeat(i * 100),
+    }));
+
+    const compacted = mgr.compact(messages);
+
+    expect(receivedEvents.length).toBe(1);
+    const event = receivedEvents[0];
+    expect(event.messages_before).toBe(10);
+    expect(event.messages_after).toBeLessThanOrEqual(10);
+    expect(event.tokens_before).toBeGreaterThanOrEqual(event.tokens_after);
+    expect(event.budget_tokens).toBe(1000);
+    expect(event.strategy_name).toBe("TieredCompact");
+  });
+
+  it("does not fire when no callback provided", () => {
+    const mgr = new ContextWindowManager(1000, defaultCounter);
+    mgr.setCompactionRatio(0.5);
+
+    const messages = Array.from({ length: 10 }, (_, i) => ({
+      role: Role.USER,
+      content: "Message " + i + ": " + "x".repeat(i * 100),
+    }));
+
+    const compacted = mgr.compact(messages);
+
+    expect(compacted).toBeDefined();
+  });
+
+  it("captures phase reached", () => {
+    const receivedEvents: CompactEvent[] = [];
+    const onCompact = (event: CompactEvent) => receivedEvents.push(event);
+
+    const mgr = new ContextWindowManager(1000, defaultCounter, null, null, null, onCompact);
+    mgr.setCompactionRatio(0.1);
+
+    const messages = Array.from({ length: 20 }, (_, i) => ({
+      role: Role.USER,
+      content: "Message " + i + ": " + "x".repeat(i * 100),
+    }));
+
+    mgr.compact(messages);
+
+    expect(receivedEvents.length).toBe(1);
+    expect(receivedEvents[0].phase_reached).toBeGreaterThan(0);
+  });
+
+  it("reports zero phase when no compaction needed", () => {
+    const receivedEvents: CompactEvent[] = [];
+    const onCompact = (event: CompactEvent) => receivedEvents.push(event);
+    const counter = (_messages: Message[]): number => 100;
+
+    const mgr = new ContextWindowManager(1000, counter, null, null, null, onCompact);
+    mgr.setCompactionRatio(0.5);
+
+    const messages = [{ role: Role.USER, content: "short" }];
+
+    mgr.compact(messages);
+
+    expect(receivedEvents.length).toBe(1);
+    expect(receivedEvents[0].phase_reached).toBe(0);
   });
 });
