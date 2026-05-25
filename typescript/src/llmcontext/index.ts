@@ -12,4 +12,6 @@ export {
 export {
   ContextWindowManager,
   defaultCounter,
+  defaultContextWarning,
+  ThresholdCallback,
 } from "./context_window.js";
