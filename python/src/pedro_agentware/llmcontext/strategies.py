@@ -53,6 +53,7 @@ class TieredCompact:
     keep_recent: int = 2
     phase_thresholds: tuple[float, float, float] | None = None
     truncate_chars: int = 200
+    last_phase: int = 0
 
     def __post_init__(self) -> None:
         if self.phase_thresholds is None:
@@ -65,6 +66,8 @@ class TieredCompact:
         self, messages: list[Message], target_tokens: int, counter: TokenCounter
     ) -> list[Message]:
         """Compact messages using 3-phase tiered strategy."""
+        self.last_phase = 0
+
         if not messages:
             return []
 
@@ -79,15 +82,18 @@ class TieredCompact:
 
         result = self._phase1_compact(result, eligible_end, counter)
         current_tokens = counter(result)
+        self.last_phase = 1
         if current_tokens <= target_tokens:
             return result
 
         result = self._phase2_compact(result, eligible_end, counter)
         current_tokens = counter(result)
+        self.last_phase = 2
         if current_tokens <= target_tokens:
             return result
 
         result = self._phase3_compact(result, eligible_end, counter)
+        self.last_phase = 3
         return result
 
     def _protected_steps(self, messages: list[Message]) -> dict[int, bool]:

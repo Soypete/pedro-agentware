@@ -3,7 +3,11 @@
 import threading
 
 from pedro_agentware.llm import Message, Role
-from pedro_agentware.llmcontext.context_window import ContextWindowManager, default_counter
+from pedro_agentware.llmcontext.context_window import (
+    CompactEvent,
+    ContextWindowManager,
+    default_counter,
+)
 
 
 def make_messages(count: int) -> list[Message]:
@@ -226,3 +230,67 @@ class TestContextWindowManager_ThreadSafety_CheckThresholds:
             t.join()
 
         assert len(errors) == 0
+
+
+class TestCompactEvent:
+    def test_compact_event_fired_on_compact(self):
+        received_events: list[CompactEvent] = []
+
+        def on_compact(event: CompactEvent):
+            received_events.append(event)
+
+        mgr = ContextWindowManager(1000, default_counter, on_compact=on_compact)
+        mgr.set_compaction_ratio(0.5)
+        messages = make_messages(10)
+
+        compacted = mgr.compact(messages)
+
+        assert len(received_events) == 1
+        event = received_events[0]
+        assert event.messages_before == 10
+        assert event.messages_after <= 10
+        assert event.tokens_before >= event.tokens_after
+        assert event.budget_tokens == 1000
+        assert event.strategy_name == "TieredCompact"
+
+    def test_compact_event_not_fired_without_callback(self):
+        mgr = ContextWindowManager(1000, default_counter)
+        mgr.set_compaction_ratio(0.5)
+        messages = make_messages(10)
+
+        compacted = mgr.compact(messages)
+
+        assert isinstance(compacted, list)
+
+    def test_compact_event_phase_reached(self):
+        received_events: list[CompactEvent] = []
+
+        def on_compact(event: CompactEvent):
+            received_events.append(event)
+
+        mgr = ContextWindowManager(1000, default_counter, on_compact=on_compact)
+        mgr.set_compaction_ratio(0.1)
+        messages = make_messages(20)
+
+        mgr.compact(messages)
+
+        assert len(received_events) == 1
+        assert received_events[0].phase_reached > 0
+
+    def test_compact_event_zero_phase_when_no_compaction_needed(self):
+        received_events: list[CompactEvent] = []
+
+        def on_compact(event: CompactEvent):
+            received_events.append(event)
+
+        def counter(messages: list[Message]) -> int:
+            return 100
+
+        mgr = ContextWindowManager(1000, counter, on_compact=on_compact)
+        mgr.set_compaction_ratio(0.5)
+        messages = make_messages(3)
+
+        mgr.compact(messages)
+
+        assert len(received_events) == 1
+        assert received_events[0].phase_reached == 0
