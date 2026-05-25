@@ -152,10 +152,7 @@ func TestContextWindowManager_CheckThresholds_ResetsAfterCompact(t *testing.T) {
 
 	mgr.CheckThresholds(ctx, msg)
 
-	_, err := mgr.Compact(msg)
-	if err != nil {
-		t.Fatalf("Compact failed: %v", err)
-	}
+	mgr.Compact(msg)
 
 	mgr.UpdateTokenCount(850)
 

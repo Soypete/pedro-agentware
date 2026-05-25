@@ -1,7 +1,7 @@
 """Context window management for conversation history."""
 
-from collections.abc import Callable
 import threading
+from collections.abc import Callable
 
 from pedro_agentware.llm import Message
 from pedro_agentware.llmcontext.strategies import (
@@ -9,7 +9,6 @@ from pedro_agentware.llmcontext.strategies import (
     TieredCompact,
     TokenCounter,
 )
-
 
 ThresholdCallback = Callable[[int, int, float], str | None]
 
