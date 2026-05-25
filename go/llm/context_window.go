@@ -1,8 +1,14 @@
 package llm
 
 import (
+	"context"
+	"sort"
 	"sync"
 )
+
+type ThresholdCallback func(tokens, budget int, pct float64) string
+
+type ContextWindowOption func(*ContextWindowManager)
 
 type ContextWindowManager struct {
 	mu              sync.RWMutex
@@ -10,17 +16,54 @@ type ContextWindowManager struct {
 	compactionRatio float64
 	counter         TokenCounter
 	lastKnownTokens *int
+	thresholds      []float64
+	onThreshold     ThresholdCallback
+	firedThresholds map[float64]struct{}
 }
 
-func NewContextWindowManager(contextWindow int, counter TokenCounter) *ContextWindowManager {
+func NewContextWindowManager(contextWindow int, counter TokenCounter, opts ...ContextWindowOption) *ContextWindowManager {
 	if counter == nil {
 		counter = DefaultCounter
 	}
-	return &ContextWindowManager{
+	m := &ContextWindowManager{
 		contextWindow:   contextWindow,
 		compactionRatio: 0.75,
 		counter:         counter,
 		lastKnownTokens: nil,
+		thresholds:      []float64{0.65, 0.80},
+		onThreshold:     DefaultThresholdCallback,
+		firedThresholds: make(map[float64]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+func WithThresholds(thresholds []float64, cb ThresholdCallback) ContextWindowOption {
+	return func(m *ContextWindowManager) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if len(thresholds) > 0 {
+			thresholdsCopy := make([]float64, len(thresholds))
+			copy(thresholdsCopy, thresholds)
+			sort.Float64s(thresholdsCopy)
+			m.thresholds = thresholdsCopy
+		}
+		if cb != nil {
+			m.onThreshold = cb
+		}
+	}
+}
+
+func DefaultThresholdCallback(tokens, budget int, pct float64) string {
+	switch {
+	case pct >= 0.80:
+		return "Context is nearly full. Summarize critical findings now and prioritize completing the current task."
+	case pct >= 0.65:
+		return "Context is filling up. Be concise and front-load important information."
+	default:
+		return ""
 	}
 }
 
@@ -65,7 +108,31 @@ func (m *ContextWindowManager) Compact(messages []Message) ([]Message, error) {
 		return nil, err
 	}
 	m.lastKnownTokens = nil
+	m.firedThresholds = make(map[float64]struct{})
 	return compacted, nil
+}
+
+func (m *ContextWindowManager) CheckThresholds(ctx context.Context, messages []Message) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	currentTokens := m.estimateTokensLocked(messages)
+	budget := m.contextWindow
+	if currentTokens == 0 || budget == 0 {
+		return ""
+	}
+
+	pct := float64(currentTokens) / float64(budget)
+
+	for _, threshold := range m.thresholds {
+		if pct >= threshold {
+			if _, fired := m.firedThresholds[threshold]; !fired {
+				m.firedThresholds[threshold] = struct{}{}
+				return m.onThreshold(currentTokens, budget, pct)
+			}
+		}
+	}
+	return ""
 }
 
 func (m *ContextWindowManager) estimateTokensLocked(messages []Message) int {
