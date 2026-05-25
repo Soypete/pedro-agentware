@@ -1,6 +1,7 @@
 """Context window management for conversation history."""
 
 import threading
+from collections.abc import Callable
 
 from pedro_agentware.llm import Message
 from pedro_agentware.llmcontext.strategies import (
@@ -8,6 +9,17 @@ from pedro_agentware.llmcontext.strategies import (
     TieredCompact,
     TokenCounter,
 )
+
+ThresholdCallback = Callable[[int, int, float], str | None]
+
+
+def default_context_warning(tokens: int, budget: int, pct: float) -> str | None:
+    """Default callback for context threshold warnings."""
+    if pct >= 0.80:
+        return "[Context is nearly full. Summarize critical findings and complete current task.]"
+    if pct >= 0.65:
+        return "[Context is filling up. Be concise and front-load important information.]"
+    return None
 
 
 class ContextWindowManager:
@@ -18,6 +30,8 @@ class ContextWindowManager:
         context_window: int,
         counter: TokenCounter | None = None,
         strategy: CompactionStrategy | None = None,
+        context_thresholds: list[float] | None = None,
+        on_context_threshold: ThresholdCallback | None = None,
     ) -> None:
         self._context_window = context_window
         self._compaction_ratio = 0.75
@@ -27,6 +41,13 @@ class ContextWindowManager:
         )
         self._last_known_tokens: int | None = None
         self._lock = threading.RLock()
+        self._context_thresholds = (
+            sorted(context_thresholds) if context_thresholds else [0.65, 0.80]
+        )
+        self._on_context_threshold = (
+            on_context_threshold if on_context_threshold is not None else default_context_warning
+        )
+        self._fired_thresholds: set[float] = set()
 
     def set_compaction_ratio(self, ratio: float) -> None:
         """Set the ratio of context window at which compaction triggers."""
@@ -65,7 +86,29 @@ class ContextWindowManager:
             target_tokens = int(self._context_window * self._compaction_ratio)
             compacted = self._strategy.compact(messages, target_tokens, self._counter)
             self._last_known_tokens = None
+            self._fired_thresholds = set()
             return compacted
+
+    def check_thresholds(self, messages: list[Message]) -> str | None:
+        """Check if usage has crossed any configured threshold.
+
+        Returns a warning to inject as transient message, or None.
+        Each threshold fires at most once per session; resets after compaction.
+        """
+        with self._lock:
+            current_tokens = self._estimate_tokens(messages)
+            budget = self._context_window
+            if current_tokens == 0 or budget == 0:
+                return None
+
+            pct = current_tokens / budget
+
+            for threshold in reversed(self._context_thresholds):
+                if pct >= threshold:
+                    if threshold not in self._fired_thresholds:
+                        self._fired_thresholds.add(threshold)
+                        return self._on_context_threshold(current_tokens, budget, pct)
+            return None
 
     def _estimate_tokens(self, messages: list[Message]) -> int:
         """Estimate tokens, using actual count if available."""
