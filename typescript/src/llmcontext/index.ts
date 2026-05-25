@@ -11,6 +11,8 @@ export {
 } from "./strategies.js";
 export {
   ContextWindowManager,
+  CompactEvent,
+  CompactCallback,
   defaultCounter,
   defaultContextWarning,
   ThresholdCallback,

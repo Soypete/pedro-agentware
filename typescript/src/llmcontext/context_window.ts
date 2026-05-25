@@ -2,6 +2,19 @@ import type { Message } from "../llm/request.js";
 import type { CompactionStrategy, TokenCounter } from "./strategies.js";
 import { TieredCompact } from "./strategies.js";
 
+export interface CompactEvent {
+  step_index: number;
+  tokens_before: number;
+  tokens_after: number;
+  budget_tokens: number;
+  messages_before: number;
+  messages_after: number;
+  phase_reached: number;
+  strategy_name: string;
+}
+
+export type CompactCallback = (event: CompactEvent) => void;
+
 export type ThresholdCallback = (
   tokens: number,
   budget: number,
@@ -31,13 +44,15 @@ export class ContextWindowManager {
   private contextThresholds: number[];
   private onContextThreshold: ThresholdCallback;
   private firedThresholds: Set<number>;
+  private onCompact: CompactCallback | null;
 
   constructor(
     contextWindow: number,
     counter: TokenCounter | null = null,
     strategy: CompactionStrategy | null = null,
     contextThresholds: number[] | null = null,
-    onContextThreshold: ThresholdCallback | null = null
+    onContextThreshold: ThresholdCallback | null = null,
+    onCompact: CompactCallback | null = null
   ) {
     this.contextWindow = contextWindow;
     this.compactionRatio = 0.75;
@@ -49,6 +64,7 @@ export class ContextWindowManager {
       : [0.65, 0.8];
     this.onContextThreshold = onContextThreshold ?? defaultContextWarning;
     this.firedThresholds = new Set();
+    this.onCompact = onCompact;
   }
 
   setCompactionRatio(ratio: number): void {
@@ -72,8 +88,32 @@ export class ContextWindowManager {
   }
 
   compact(messages: Message[]): Message[] {
+    const tokensBefore = this.estimateTokens(messages);
+    const messagesBefore = messages.length;
     const targetTokens = Math.floor(this.contextWindow * this.compactionRatio);
     const compacted = this.strategy.compact(messages, targetTokens, this.counter);
+    const tokensAfter = this.counter(compacted);
+    const messagesAfter = compacted.length;
+
+    let phaseReached = 0;
+    if (this.strategy instanceof TieredCompact) {
+      phaseReached = (this.strategy as TieredCompact).lastPhase;
+    }
+
+    if (this.onCompact !== null) {
+      const event: CompactEvent = {
+        step_index: 0,
+        tokens_before: tokensBefore,
+        tokens_after: tokensAfter,
+        budget_tokens: this.contextWindow,
+        messages_before: messagesBefore,
+        messages_after: messagesAfter,
+        phase_reached: phaseReached,
+        strategy_name: this.strategy.name(),
+      };
+      this.onCompact(event);
+    }
+
     this.lastKnownTokens = null;
     this.firedThresholds.clear();
     return compacted;
