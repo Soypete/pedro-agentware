@@ -124,3 +124,105 @@ class TestDefaultCounter:
     def test_empty_messages_returns_zero(self):
         count = default_counter([])
         assert count == 0
+
+
+class TestContextWindowManager_CheckThresholds:
+    def test_fires_once_per_threshold(self):
+        def counter(messages):
+            return 850
+
+        mgr = ContextWindowManager(1000, counter, context_thresholds=[0.80])
+        messages = [Message(role=Role.USER, content="test")]
+
+        warning = mgr.check_thresholds(messages)
+        assert warning is not None
+
+        warning = mgr.check_thresholds(messages)
+        assert warning is None
+
+    def test_resets_after_compact(self):
+        def counter(messages):
+            return 850
+
+        mgr = ContextWindowManager(1000, counter, context_thresholds=[0.80])
+        messages = [Message(role=Role.USER, content="test")]
+
+        mgr.check_thresholds(messages)
+
+        mgr.compact(messages)
+
+        mgr.update_token_count(850)
+        warning = mgr.check_thresholds(messages)
+        assert warning is not None
+
+    def test_highest_threshold_fires_first(self):
+        def counter(messages):
+            return 900
+
+        mgr = ContextWindowManager(1000, counter, context_thresholds=[0.50, 0.80, 0.65])
+        messages = [Message(role=Role.USER, content="test")]
+
+        warning = mgr.check_thresholds(messages)
+        assert warning is not None
+        assert "nearly full" in warning
+
+    def test_default_thresholds(self):
+        def counter(messages):
+            return 700
+
+        mgr = ContextWindowManager(1000, counter)
+        messages = [Message(role=Role.USER, content="test")]
+
+        warning = mgr.check_thresholds(messages)
+        assert warning is not None
+        assert "filling up" in warning
+
+    def test_custom_callback(self):
+        def counter(messages):
+            return 850
+
+        called = [False]
+
+        def custom_cb(tokens, budget, pct):
+            called[0] = True
+            return "custom warning"
+
+        mgr = ContextWindowManager(
+            1000, counter, context_thresholds=[0.80], on_context_threshold=custom_cb
+        )
+        messages = [Message(role=Role.USER, content="test")]
+
+        warning = mgr.check_thresholds(messages)
+        assert called[0]
+        assert warning == "custom warning"
+
+    def test_zero_tokens_returns_none(self):
+        mgr = ContextWindowManager(1000, None)
+        messages = [Message(role=Role.USER, content="")]
+
+        warning = mgr.check_thresholds(messages)
+        assert warning is None
+
+
+class TestContextWindowManager_ThreadSafety_CheckThresholds:
+    def test_concurrent_check_thresholds(self):
+        mgr = ContextWindowManager(
+            1000, default_counter, context_thresholds=[0.50]
+        )
+        errors = []
+
+        def worker():
+            try:
+                for i in range(100):
+                    mgr.check_thresholds(make_messages(5))
+                    mgr.update_token_count(i)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0
