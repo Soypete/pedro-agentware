@@ -68,6 +68,8 @@ class ErrorTracker:
         return sum(1 for e in self._errors.get(session_id, []) if e.tool == tool)
 
     def _prune_old_errors(self, session_id: str) -> None:
+        if session_id not in self._errors:
+            return
         if len(self._errors[session_id]) <= self._max_errors_per_tool:
             return
 
