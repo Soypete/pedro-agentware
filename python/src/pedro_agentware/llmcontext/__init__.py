@@ -1,6 +1,6 @@
 """LLMContext package - Conversation context management."""
 
-from .context_window import ContextWindowManager
+from .context_window import CompactEvent, ContextWindowManager
 from .manager import ContextManager
 
-__all__ = ["ContextManager", "ContextWindowManager"]
+__all__ = ["CompactEvent", "ContextManager", "ContextWindowManager"]

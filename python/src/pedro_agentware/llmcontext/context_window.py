@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from pedro_agentware.llm import Message
 from pedro_agentware.llmcontext.strategies import (
@@ -9,6 +10,20 @@ from pedro_agentware.llmcontext.strategies import (
     TieredCompact,
     TokenCounter,
 )
+
+
+@dataclass(frozen=True)
+class CompactEvent:
+    """Event emitted when context compaction occurs."""
+
+    step_index: int
+    tokens_before: int
+    tokens_after: int
+    budget_tokens: int
+    messages_before: int
+    messages_after: int
+    phase_reached: int
+    strategy_name: str
 
 ThresholdCallback = Callable[[int, int, float], str | None]
 
@@ -32,6 +47,7 @@ class ContextWindowManager:
         strategy: CompactionStrategy | None = None,
         context_thresholds: list[float] | None = None,
         on_context_threshold: ThresholdCallback | None = None,
+        on_compact: Callable[[CompactEvent], None] | None = None,
     ) -> None:
         self._context_window = context_window
         self._compaction_ratio = 0.75
@@ -48,6 +64,7 @@ class ContextWindowManager:
             on_context_threshold if on_context_threshold is not None else default_context_warning
         )
         self._fired_thresholds: set[float] = set()
+        self._on_compact = on_compact
 
     def set_compaction_ratio(self, ratio: float) -> None:
         """Set the ratio of context window at which compaction triggers."""
@@ -81,10 +98,33 @@ class ContextWindowManager:
         """Compact messages to fit within target token count.
 
         Returns compacted messages. Resets last_known_tokens after compaction.
+        Emits CompactEvent via on_compact callback if configured.
         """
         with self._lock:
+            tokens_before = self._estimate_tokens(messages)
+            messages_before = len(messages)
             target_tokens = int(self._context_window * self._compaction_ratio)
             compacted = self._strategy.compact(messages, target_tokens, self._counter)
+            tokens_after = self._counter(compacted)
+            messages_after = len(compacted)
+
+            phase_reached = 0
+            if isinstance(self._strategy, TieredCompact):
+                phase_reached = self._strategy.last_phase
+
+            if self._on_compact is not None:
+                event = CompactEvent(
+                    step_index=0,
+                    tokens_before=tokens_before,
+                    tokens_after=tokens_after,
+                    budget_tokens=self._context_window,
+                    messages_before=messages_before,
+                    messages_after=messages_after,
+                    phase_reached=phase_reached,
+                    strategy_name=self._strategy.name(),
+                )
+                self._on_compact(event)
+
             self._last_known_tokens = None
             self._fired_thresholds = set()
             return compacted
