@@ -251,3 +251,99 @@ func TestContextWindowManager_ThreadSafety_CheckThresholds(t *testing.T) {
 
 	<-done
 }
+
+func TestContextWindowManager_Compact_CallbackFires(t *testing.T) {
+	counter := func(messages []Message) int {
+		return 900
+	}
+	var capturedEvent CompactEvent
+	callback := func(event CompactEvent) {
+		capturedEvent = event
+	}
+	mgr := NewContextWindowManager(1000, counter, WithOnCompact(callback))
+
+	messages := []Message{{Role: RoleUser, Content: "test"}}
+	_, err := mgr.Compact(messages)
+	if err != nil {
+		t.Fatalf("Compact failed: %v", err)
+	}
+
+	if capturedEvent.TokensBefore == 0 {
+		t.Error("callback should have been called with TokensBefore set")
+	}
+}
+
+func TestContextWindowManager_Compact_EventContainsCorrectData(t *testing.T) {
+	counter := func(messages []Message) int {
+		return 900
+	}
+	var capturedEvent CompactEvent
+	callback := func(event CompactEvent) {
+		capturedEvent = event
+	}
+	mgr := NewContextWindowManager(1000, counter, WithOnCompact(callback))
+
+	messages := []Message{
+		{Role: RoleSystem, Content: "system"},
+		{Role: RoleUser, Content: "test"},
+		{Role: RoleAssistant, Content: "response"},
+	}
+	_, err := mgr.Compact(messages)
+	if err != nil {
+		t.Fatalf("Compact failed: %v", err)
+	}
+
+	if capturedEvent.BudgetTokens != 1000 {
+		t.Errorf("expected BudgetTokens=1000, got %d", capturedEvent.BudgetTokens)
+	}
+	if capturedEvent.MessagesBefore != 3 {
+		t.Errorf("expected MessagesBefore=3, got %d", capturedEvent.MessagesBefore)
+	}
+	if capturedEvent.StrategyName != "TieredCompact" {
+		t.Errorf("expected StrategyName=TieredCompact, got %s", capturedEvent.StrategyName)
+	}
+	if capturedEvent.PhaseReached == 0 {
+		t.Error("PhaseReached should be set (1 for non-tiered or 1-3 for tiered)")
+	}
+}
+
+func TestContextWindowManager_Compact_NoCallbackSet(t *testing.T) {
+	counter := func(messages []Message) int {
+		return 900
+	}
+	mgr := NewContextWindowManager(1000, counter)
+
+	messages := []Message{{Role: RoleUser, Content: "test"}}
+	_, err := mgr.Compact(messages)
+	if err != nil {
+		t.Fatalf("Compact should not panic with nil callback: %v", err)
+	}
+}
+
+func TestContextWindowManager_Compact_PhaseReachedReflectsPhases(t *testing.T) {
+	stepIndex := 5
+
+	longContent := ""
+	for i := 0; i < 100; i++ {
+		longContent += "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+	}
+
+	messages := make([]Message, 20)
+	for i := range messages {
+		si := stepIndex + i
+		messages[i] = Message{
+			Role:    RoleUser,
+			Content: longContent,
+			Meta: MessageMeta{
+				StepIndex: &si,
+			},
+		}
+	}
+
+	mgr := NewContextWindowManager(1000, DefaultCounter, WithOnCompact(func(event CompactEvent) {}))
+
+	_, err := mgr.Compact(messages)
+	if err != nil {
+		t.Fatalf("Compact failed: %v", err)
+	}
+}

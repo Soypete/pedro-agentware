@@ -6,15 +6,35 @@ var ErrEmptyMessages = errors.New("no messages to compact")
 
 type TokenCounter func([]Message) int
 
+type CompactEvent struct {
+	StepIndex      int
+	TokensBefore   int
+	TokensAfter    int
+	BudgetTokens   int
+	MessagesBefore int
+	MessagesAfter  int
+	PhaseReached   int
+	StrategyName   string
+}
+
 type CompactionStrategy interface {
 	Compact(messages []Message, targetTokens int, counter TokenCounter) ([]Message, error)
 	Name() string
+}
+
+type PhaseReporter interface {
+	LastPhase() int
 }
 
 type TieredCompact struct {
 	KeepRecent      int
 	PhaseThresholds [3]float64
 	TruncateChars   int
+	lastPhase       int
+}
+
+func (t *TieredCompact) LastPhase() int {
+	return t.lastPhase
 }
 
 func NewTieredCompact() *TieredCompact {
@@ -42,22 +62,26 @@ func (t *TieredCompact) Compact(messages []Message, targetTokens int, counter To
 	currentTokens := counter(result)
 
 	if currentTokens <= targetTokens {
+		t.lastPhase = 0
 		return result, nil
 	}
 
 	result = t.phase1Compact(result, eligibleEnd, counter)
 	currentTokens = counter(result)
 	if currentTokens <= targetTokens {
+		t.lastPhase = 1
 		return result, nil
 	}
 
 	result = t.phase2Compact(result, eligibleEnd, counter)
 	currentTokens = counter(result)
 	if currentTokens <= targetTokens {
+		t.lastPhase = 2
 		return result, nil
 	}
 
 	result = t.phase3Compact(result, eligibleEnd, counter)
+	t.lastPhase = 3
 	return result, nil
 }
 
