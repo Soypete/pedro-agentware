@@ -8,6 +8,8 @@ import (
 
 type ThresholdCallback func(tokens, budget int, pct float64) string
 
+type CompactCallback func(CompactEvent)
+
 type ContextWindowOption func(*ContextWindowManager)
 
 type ContextWindowManager struct {
@@ -18,6 +20,7 @@ type ContextWindowManager struct {
 	lastKnownTokens *int
 	thresholds      []float64
 	onThreshold     ThresholdCallback
+	onCompact       CompactCallback
 	firedThresholds map[float64]struct{}
 }
 
@@ -53,6 +56,14 @@ func WithThresholds(thresholds []float64, cb ThresholdCallback) ContextWindowOpt
 		if cb != nil {
 			m.onThreshold = cb
 		}
+	}
+}
+
+func WithOnCompact(cb CompactCallback) ContextWindowOption {
+	return func(m *ContextWindowManager) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.onCompact = cb
 	}
 }
 
@@ -101,12 +112,41 @@ func (m *ContextWindowManager) Compact(messages []Message) ([]Message, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	targetTokens := int(float64(m.contextWindow) * m.compactionRatio)
+	tokensBefore := m.counter(messages)
+	messagesBefore := len(messages)
+	budgetTokens := m.contextWindow
+	targetTokens := int(float64(budgetTokens) * m.compactionRatio)
 	strategy := NewTieredCompact()
 	compacted, err := strategy.Compact(messages, targetTokens, m.counter)
 	if err != nil {
 		return nil, err
 	}
+	tokensAfter := m.counter(compacted)
+	messagesAfter := len(compacted)
+
+	phaseReached := 1
+	if strategy != nil {
+		phaseReached = strategy.LastPhase()
+	}
+
+	stepIndex := 0
+	if len(messages) > 0 && messages[len(messages)-1].Meta.StepIndex != nil {
+		stepIndex = *messages[len(messages)-1].Meta.StepIndex
+	}
+
+	if m.onCompact != nil {
+		m.onCompact(CompactEvent{
+			StepIndex:      stepIndex,
+			TokensBefore:   tokensBefore,
+			TokensAfter:    tokensAfter,
+			BudgetTokens:   budgetTokens,
+			MessagesBefore: messagesBefore,
+			MessagesAfter:  messagesAfter,
+			PhaseReached:   phaseReached,
+			StrategyName:   strategy.Name(),
+		})
+	}
+
 	m.lastKnownTokens = nil
 	m.firedThresholds = make(map[float64]struct{})
 	return compacted, nil
