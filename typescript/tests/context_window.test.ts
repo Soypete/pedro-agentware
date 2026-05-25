@@ -1,6 +1,10 @@
 import { describe, it, expect } from "@jest/globals";
 import { Message, Role } from "../src/llm/request.js";
-import { ContextWindowManager, defaultCounter } from "../src/llmcontext/context_window.js";
+import {
+  ContextWindowManager,
+  defaultCounter,
+  defaultContextWarning,
+} from "../src/llmcontext/context_window.js";
 
 describe("ContextWindowManager_UpdateTokenCount", () => {
   it("records actual token count from backend", () => {
@@ -121,5 +125,95 @@ describe("defaultCounter", () => {
         4);
 
     expect(count).toBe(expected);
+  });
+});
+
+describe("ContextWindowManager_CheckThresholds", () => {
+  it("fires once per threshold", () => {
+    const counter = (_messages: Message[]): number => 700;
+    const mgr = new ContextWindowManager(1000, counter, null, [0.5, 0.65]);
+
+    const warning1 = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning1).not.toBeNull();
+    expect(warning1).toContain("filling up");
+
+    const warning2 = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning2).not.toBeNull();
+    expect(warning2).toContain("filling up");
+  });
+
+  it("resets after compact", () => {
+    const mgr = new ContextWindowManager(1000, defaultCounter);
+    mgr.setCompactionRatio(0.75);
+
+    mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+
+    mgr.compact([{ role: Role.USER, content: "short" }]);
+
+    mgr.updateTokenCount(850);
+
+    const warning = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning).not.toBeNull();
+  });
+
+  it("highest threshold fires first", () => {
+    const counter = (_messages: Message[]): number => 900;
+    const mgr = new ContextWindowManager(
+      1000,
+      counter,
+      null,
+      [0.5, 0.8, 0.65]
+    );
+
+    const warning = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning).not.toBeNull();
+    expect(warning).toContain("nearly full");
+  });
+
+  it("default thresholds", () => {
+    const counter = (_messages: Message[]): number => 700;
+    const mgr = new ContextWindowManager(1000, counter);
+
+    const warning = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning).not.toBeNull();
+    expect(warning).toContain("filling up");
+  });
+
+  it("custom callback", () => {
+    const counter = (_messages: Message[]): number => 700;
+    const customCb = (_tokens: number, _budget: number, _pct: number): string | null => "Custom warning!";
+    const mgr = new ContextWindowManager(
+      1000,
+      counter,
+      null,
+      [0.5],
+      customCb
+    );
+
+    const warning = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning).toBe("Custom warning!");
+  });
+
+  it("zero tokens returns null", () => {
+    const mgr = new ContextWindowManager(1000, () => 0);
+
+    const warning = mgr.checkThresholds([{ role: Role.USER, content: "test" }]);
+    expect(warning).toBeNull();
+  });
+});
+
+describe("ContextWindowManager_ThreadSafety_CheckThresholds", () => {
+  it("concurrent check thresholds", async () => {
+    const counter = (_messages: Message[]): number => 700;
+    const mgr = new ContextWindowManager(1000, counter, null, [0.5, 0.65]);
+
+    const calls: Promise<string | null>[] = [];
+    for (let i = 0; i < 50; i++) {
+      calls.push(Promise.resolve(mgr.checkThresholds([{ role: Role.USER, content: "test" }])));
+    }
+
+    const results = await Promise.all(calls);
+    const nonNull = results.filter((r) => r !== null).length;
+    expect(nonNull).toBeGreaterThan(0);
   });
 });
