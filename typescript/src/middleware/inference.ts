@@ -34,10 +34,6 @@ export interface InferenceConfig {
   stepIndex?: number;
 }
 
-function getToolNames(specs: ToolDefinition[]): string[] {
-  return specs.map((spec) => spec.name);
-}
-
 export async function runInference(
   messages: Message[],
   cfg: InferenceConfig,
