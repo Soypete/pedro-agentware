@@ -1,139 +1,57 @@
 package kitaru
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
 	"time"
+
+	sdk "github.com/zenml-io/kitaru-sdk-go"
 )
 
-type HTTPClient struct {
-	baseURL    string
-	apiKey     string
-	project    string
-	httpClient *http.Client
-	mu         sync.RWMutex
+type ClientOption = sdk.ClientOption
+
+func WithUsernamePassword(username, password string) ClientOption {
+	return sdk.WithUsernamePassword(username, password)
 }
 
-type HTTPClientOption func(*HTTPClient)
+type KitaruClient struct {
+	*sdk.Client
+	mu sync.Mutex
+}
 
-func WithHTTPClient(client *http.Client) HTTPClientOption {
-	return func(c *HTTPClient) {
-		c.httpClient = client
+func NewClient(serverURL, apiKey, project string, opts ...ClientOption) *KitaruClient {
+	return &KitaruClient{
+		Client: sdk.NewClient(serverURL, apiKey, project, opts...),
 	}
 }
 
-func NewHTTPClient(baseURL, apiKey, project string, opts ...HTTPClientOption) *HTTPClient {
-	client := &HTTPClient{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		project: project,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-	for _, opt := range opts {
-		opt(client)
-	}
-	return client
-}
-
-func (c *HTTPClient) Flow(name string) FlowHandle {
-	return &httpFlowHandle{
+func (c *KitaruClient) Flow(name string) FlowHandle {
+	return &flowHandle{
 		client:   c,
 		flowName: name,
 	}
 }
 
-func (c *HTTPClient) doRequest(ctx context.Context, method, path string, body any) ([]byte, error) {
-	var reqBody io.Reader
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(jsonBody)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-	if c.project != "" {
-		req.Header.Set("X-Project", c.project)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
-}
-
-type httpFlowHandle struct {
-	client   *HTTPClient
+type flowHandle struct {
+	client   *KitaruClient
 	flowName string
 	execID   string
 	mu       sync.Mutex
 }
 
-type RunFlowRequest struct {
-	Inputs map[string]any `json:"inputs"`
-}
-
-type RunFlowResponse struct {
-	ExecutionID string `json:"execution_id"`
-}
-
-type ExecutionResponse struct {
-	ID        string         `json:"id"`
-	Status    string         `json:"status"`
-	StartedAt string         `json:"started_at"`
-	UpdatedAt string         `json:"updated_at"`
-	Output    map[string]any `json:"output"`
-}
-
-func (f *httpFlowHandle) Run(ctx context.Context, inputs map[string]any) (string, error) {
-	req := RunFlowRequest{Inputs: inputs}
-	respBody, err := f.client.doRequest(ctx, "POST", fmt.Sprintf("/api/v1/flows/%s/run", f.flowName), req)
+func (f *flowHandle) Run(ctx context.Context, inputs map[string]any) (string, error) {
+	execID, err := f.client.RunFlow(f.flowName, inputs)
 	if err != nil {
 		return "", err
 	}
-
-	var resp RunFlowResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
 	f.mu.Lock()
-	f.execID = resp.ExecutionID
+	f.execID = execID
 	f.mu.Unlock()
-
-	return resp.ExecutionID, nil
+	return execID, nil
 }
 
-func (f *httpFlowHandle) RunWithWait(ctx context.Context, inputs map[string]any, pollInterval time.Duration) (*Execution, error) {
+func (f *flowHandle) RunWithWait(ctx context.Context, inputs map[string]any, pollInterval time.Duration) (*Execution, error) {
 	_, err := f.Run(ctx, inputs)
 	if err != nil {
 		return nil, err
@@ -151,14 +69,14 @@ func (f *httpFlowHandle) RunWithWait(ctx context.Context, inputs map[string]any,
 			if err != nil {
 				return nil, err
 			}
-			if exec.Status == "completed" || exec.Status == "failed" || exec.Status == "waiting" {
+			if exec.Status == "completed" || exec.Status == "failed" || exec.Status == "cancelled" {
 				return exec, nil
 			}
 		}
 	}
 }
 
-func (f *httpFlowHandle) GetExecution() (*Execution, error) {
+func (f *flowHandle) GetExecution() (*Execution, error) {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -167,26 +85,21 @@ func (f *httpFlowHandle) GetExecution() (*Execution, error) {
 		return nil, fmt.Errorf("no execution started")
 	}
 
-	respBody, err := f.client.doRequest(context.Background(), "GET", fmt.Sprintf("/api/v1/executions/%s", execID), nil)
+	exec, err := f.client.GetExecution(execID)
 	if err != nil {
 		return nil, err
-	}
-
-	var resp ExecutionResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	return &Execution{
-		ID:        resp.ID,
-		Status:    resp.Status,
-		StartedAt: parseTime(resp.StartedAt),
-		UpdatedAt: parseTime(resp.UpdatedAt),
-		Output:    resp.Output,
+		ID:        exec.ID,
+		Status:    string(exec.Status),
+		StartedAt: exec.CreatedAt,
+		UpdatedAt: exec.UpdatedAt,
+		Output:    exec.Outputs,
 	}, nil
 }
 
-func (f *httpFlowHandle) Checkpoint(name string, data map[string]any) error {
+func (f *flowHandle) Checkpoint(name string, data map[string]any) error {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -195,14 +108,11 @@ func (f *httpFlowHandle) Checkpoint(name string, data map[string]any) error {
 		return fmt.Errorf("no execution started")
 	}
 
-	_, err := f.client.doRequest(context.Background(), "POST", fmt.Sprintf("/api/v1/executions/%s/checkpoints", execID), map[string]any{
-		"name": name,
-		"data": data,
-	})
+	_, err := f.client.Client.SaveCheckpoint(execID, name, data)
 	return err
 }
 
-func (f *httpFlowHandle) RestoreCheckpoint(name string) (map[string]any, error) {
+func (f *flowHandle) RestoreCheckpoint(name string) (map[string]any, error) {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -211,20 +121,15 @@ func (f *httpFlowHandle) RestoreCheckpoint(name string) (map[string]any, error) 
 		return nil, fmt.Errorf("no execution started")
 	}
 
-	respBody, err := f.client.doRequest(context.Background(), "GET", fmt.Sprintf("/api/v1/executions/%s/checkpoints/%s", execID, name), nil)
+	checkpoint, err := f.client.GetCheckpoint(execID, name)
 	if err != nil {
 		return nil, err
 	}
 
-	var checkpoint map[string]any
-	if err := json.Unmarshal(respBody, &checkpoint); err != nil {
-		return nil, fmt.Errorf("failed to parse checkpoint: %w", err)
-	}
-
-	return checkpoint, nil
+	return checkpoint.Data, nil
 }
 
-func (f *httpFlowHandle) SaveArtifact(key string, data interface{}, artifactType string) error {
+func (f *flowHandle) SaveArtifact(key string, data interface{}, artifactType string) error {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -233,15 +138,11 @@ func (f *httpFlowHandle) SaveArtifact(key string, data interface{}, artifactType
 		return fmt.Errorf("no execution started")
 	}
 
-	_, err := f.client.doRequest(context.Background(), "POST", fmt.Sprintf("/api/v1/executions/%s/artifacts", execID), map[string]any{
-		"key":          key,
-		"data":         data,
-		"artifactType": artifactType,
-	})
+	_, err := f.client.SaveArtifact(execID, key, data, artifactType)
 	return err
 }
 
-func (f *httpFlowHandle) LoadArtifact(key string, dest interface{}) error {
+func (f *flowHandle) LoadArtifact(key string, dest interface{}) error {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -250,15 +151,10 @@ func (f *httpFlowHandle) LoadArtifact(key string, dest interface{}) error {
 		return fmt.Errorf("no execution started")
 	}
 
-	respBody, err := f.client.doRequest(context.Background(), "GET", fmt.Sprintf("/api/v1/executions/%s/artifacts/%s", execID, key), nil)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(respBody, dest)
+	return f.client.LoadArtifact(execID, key, dest)
 }
 
-func (f *httpFlowHandle) Log(level LogLevel, message string, metadata map[string]any) error {
+func (f *flowHandle) Log(level LogLevel, message string, metadata map[string]any) error {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
@@ -267,72 +163,46 @@ func (f *httpFlowHandle) Log(level LogLevel, message string, metadata map[string
 		return fmt.Errorf("no execution started")
 	}
 
-	levelStr := "info"
+	// Convert LogLevel to SDK LogLevel
+	sdkLevel := sdk.LogLevelInfo
 	switch level {
 	case LogLevelDebug:
-		levelStr = "debug"
+		sdkLevel = sdk.LogLevelDebug
 	case LogLevelInfo:
-		levelStr = "info"
+		sdkLevel = sdk.LogLevelInfo
 	case LogLevelWarning:
-		levelStr = "warning"
+		sdkLevel = sdk.LogLevelWarn
 	case LogLevelError:
-		levelStr = "error"
+		sdkLevel = sdk.LogLevelError
 	}
 
-	_, err := f.client.doRequest(context.Background(), "POST", fmt.Sprintf("/api/v1/executions/%s/logs", execID), map[string]any{
-		"level":    levelStr,
-		"message":  message,
-		"metadata": metadata,
-	})
-	return err
+	return f.client.Log(execID, sdkLevel, message, metadata)
 }
 
-func (f *httpFlowHandle) Replay(fromCheckpoint string, inputs map[string]any) (string, error) {
+func (f *flowHandle) Replay(fromCheckpoint string, inputs map[string]any) (string, error) {
 	f.mu.Lock()
 	execID := f.execID
 	f.mu.Unlock()
 
 	if execID == "" {
-		return "", fmt.Errorf("no execution to replay")
+		return "", fmt.Errorf("no execution started")
 	}
 
-	req := map[string]any{
-		"from_checkpoint": fromCheckpoint,
-	}
-	if inputs != nil {
-		req["inputs"] = inputs
-	}
-
-	respBody, err := f.client.doRequest(context.Background(), "POST", fmt.Sprintf("/api/v1/executions/%s/replay", execID), req)
+	newExecID, err := f.client.Replay(execID, fromCheckpoint, inputs)
 	if err != nil {
 		return "", err
 	}
 
-	var resp RunFlowResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse replay response: %w", err)
-	}
-
+	// Update the flow handle with new execution ID
 	f.mu.Lock()
-	f.execID = resp.ExecutionID
+	f.execID = newExecID
 	f.mu.Unlock()
 
-	return resp.ExecutionID, nil
+	return newExecID, nil
 }
 
-func (f *httpFlowHandle) GetExecID() string {
+func (f *flowHandle) GetExecID() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.execID
-}
-
-func parseTime(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }
