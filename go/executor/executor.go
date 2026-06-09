@@ -35,6 +35,8 @@ type ExecuteRequest struct {
 	CallerCtx middleware.CallerContext
 	// JobID is an optional identifier for correlating logs and context files.
 	JobID string
+	// Thinking enables extended thinking/reasoning for the model.
+	Thinking bool
 }
 
 // ExecuteResult is the output of a completed (or terminated) agent run.
