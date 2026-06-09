@@ -34,10 +34,32 @@ func (e *inferenceExecutor) Execute(ctx context.Context, req ExecuteRequest) (*E
 		default:
 		}
 
+		toolsList := e.config.Registry.All()
+		llmTools := make([]llm.ToolDefinition, 0, len(toolsList))
+		for _, t := range toolsList {
+			inputSchema := map[string]any{}
+			if ext, ok := t.(interface{ InputSchema() map[string]any }); ok {
+				inputSchema = ext.InputSchema()
+			}
+			llmTools = append(llmTools, llm.ToolDefinition{
+				Name:        t.Name(),
+				Description: t.Description(),
+				InputSchema: inputSchema,
+			})
+		}
+
 		llmReq := &llm.Request{
 			Messages:    conversation,
 			Temperature: 0.7,
 			MaxTokens:   4096,
+			Tools:       llmTools,
+		}
+
+		if req.Thinking {
+			llmReq.Thinking = &llm.ThinkingConfig{
+				Type:      "enabled",
+				MaxTokens: 8192,
+			}
 		}
 
 		resp, err := e.config.Backend.Complete(ctx, llmReq)

@@ -30,6 +30,12 @@ type Request struct {
 	Temperature float64
 	MaxTokens   int
 	Stop        []string
+	Thinking    *ThinkingConfig
+}
+
+type ThinkingConfig struct {
+	Type      string
+	MaxTokens int
 }
 
 // Message is a single turn in a conversation.
