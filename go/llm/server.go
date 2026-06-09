@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -71,7 +73,10 @@ func (b *serverBackend) Complete(ctx context.Context, req *Request) (*Response, 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", b.config.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
+	baseURL := b.config.BaseURL
+	cleanBase := strings.TrimSuffix(strings.TrimSuffix(baseURL, "/v1"), "/v1")
+	log.Printf("[LLM] BaseURL: '%s' -> cleaned: '%s'", baseURL, cleanBase)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", cleanBase+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -80,6 +85,8 @@ func (b *serverBackend) Complete(ctx context.Context, req *Request) (*Response, 
 	if b.config.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.config.APIKey)
 	}
+
+	log.Printf("[LLM] Calling %s/v1/chat/completions with model %s", b.config.BaseURL, b.config.Model)
 
 	resp, err := b.client.Do(httpReq)
 	if err != nil {
@@ -105,6 +112,11 @@ func (b *serverBackend) Complete(ctx context.Context, req *Request) (*Response, 
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	log.Printf("[LLM] Got response with %d choices, usage: %d tokens", len(result.Choices), result.Usage.TotalTokens)
+	if len(result.Choices) > 0 {
+		log.Printf("[LLM] Content length: %d, ToolCalls: %d", len(result.Choices[0].Message.Content), len(result.Choices[0].Message.ToolCalls))
 	}
 
 	if len(result.Choices) == 0 {
