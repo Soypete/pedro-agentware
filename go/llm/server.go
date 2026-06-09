@@ -59,6 +59,13 @@ func (b *serverBackend) Complete(ctx context.Context, req *Request) (*Response, 
 		payload["tools"] = tools
 	}
 
+	if req.Thinking != nil {
+		payload["thinking"] = map[string]any{
+			"type":       req.Thinking.Type,
+			"max_tokens": req.Thinking.MaxTokens,
+		}
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
