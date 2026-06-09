@@ -7,6 +7,7 @@ type ToolFormatter interface {
 	ParseToolCalls(response string) ([]ParsedToolCall, error)
 	FormatToolResult(name string, result *tools.Result) string
 	ModelFamily() string
+	ValidateFormat(response string) error
 }
 
 type ParsedToolCall struct {

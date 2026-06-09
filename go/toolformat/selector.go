@@ -5,6 +5,8 @@ import "strings"
 func GetFormatter(modelName string) ToolFormatter {
 	lower := strings.ToLower(modelName)
 	switch {
+	case strings.Contains(lower, "nemotron"):
+		return &NemotronFormatter{}
 	case strings.Contains(lower, "qwen"):
 		return &QwenFormatter{}
 	case strings.Contains(lower, "llama"):

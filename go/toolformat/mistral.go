@@ -84,3 +84,39 @@ func (f *MistralFormatter) FormatToolResult(name string, result *tools.Result) s
 func (f *MistralFormatter) ModelFamily() string {
 	return "mistral"
 }
+
+func (f *MistralFormatter) ValidateFormat(response string) error {
+	if response == "" {
+		return nil
+	}
+
+	matches := mistralToolCallRegex.FindAllStringSubmatch(response, -1)
+	for _, m := range matches {
+		if len(m) < 2 {
+			continue
+		}
+		inner := m[1]
+
+		toolMatches := mistralToolRegex.FindAllStringSubmatch(inner, -1)
+		for _, tm := range toolMatches {
+			if len(tm) < 3 {
+				continue
+			}
+			name := tm[1]
+			argsRaw := tm[2]
+
+			if name == "" {
+				return fmt.Errorf("tool call missing function name")
+			}
+			if argsRaw == "" {
+				return fmt.Errorf("tool call %q missing arguments", name)
+			}
+
+			var args map[string]any
+			if err := json.Unmarshal([]byte(argsRaw), &args); err != nil {
+				return fmt.Errorf("tool call %q has invalid JSON arguments: %w", name, err)
+			}
+		}
+	}
+	return nil
+}

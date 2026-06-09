@@ -73,3 +73,31 @@ func (f *LlamaFormatter) FormatToolResult(name string, result *tools.Result) str
 func (f *LlamaFormatter) ModelFamily() string {
 	return "llama"
 }
+
+func (f *LlamaFormatter) ValidateFormat(response string) error {
+	if response == "" {
+		return nil
+	}
+
+	matches := llamaToolCallRegex.FindAllStringSubmatch(response, -1)
+	for _, m := range matches {
+		if len(m) < 3 {
+			continue
+		}
+		name := m[1]
+		argsRaw := m[2]
+
+		if name == "" {
+			return fmt.Errorf("tool call missing function name")
+		}
+		if argsRaw == "" {
+			return fmt.Errorf("tool call %q missing arguments", name)
+		}
+
+		var args map[string]any
+		if err := json.Unmarshal([]byte(argsRaw), &args); err != nil {
+			return fmt.Errorf("tool call %q has invalid JSON arguments: %w", name, err)
+		}
+	}
+	return nil
+}
