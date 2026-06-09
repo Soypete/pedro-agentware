@@ -73,10 +73,17 @@ func (e *inferenceExecutor) Execute(ctx context.Context, req ExecuteRequest) (*E
 			}, fmt.Errorf("llm completion failed: %w", err)
 		}
 
-		conversation = append(conversation, llm.Message{
+		assistantMsg := llm.Message{
 			Role:    llm.RoleAssistant,
 			Content: resp.Content,
-		})
+		}
+		if len(resp.ToolCalls) > 0 {
+			assistantMsg.ToolCalls = resp.ToolCalls
+			if assistantMsg.Content == "" {
+				assistantMsg.Content = ""
+			}
+		}
+		conversation = append(conversation, assistantMsg)
 
 		if isComplete(resp.Content, e.config.CompletionSignal) {
 			return &ExecuteResult{

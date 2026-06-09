@@ -7,9 +7,9 @@ import (
 	"github.com/soypete/pedro-agentware/go/tools"
 )
 
-type GenericFormatter struct{}
+type NemotronFormatter struct{}
 
-func (f *GenericFormatter) FormatToolDefinitions(toolsList []tools.Tool) string {
+func (f *NemotronFormatter) FormatToolDefinitions(toolsList []tools.Tool) string {
 	if len(toolsList) == 0 {
 		return ""
 	}
@@ -35,7 +35,7 @@ func (f *GenericFormatter) FormatToolDefinitions(toolsList []tools.Tool) string 
 	return string(b)
 }
 
-func (f *GenericFormatter) ParseToolCalls(response string) ([]ParsedToolCall, error) {
+func (f *NemotronFormatter) ParseToolCalls(response string) ([]ParsedToolCall, error) {
 	if response == "" {
 		return nil, nil
 	}
@@ -66,18 +66,18 @@ func (f *GenericFormatter) ParseToolCalls(response string) ([]ParsedToolCall, er
 	return result, nil
 }
 
-func (f *GenericFormatter) FormatToolResult(name string, result *tools.Result) string {
+func (f *NemotronFormatter) FormatToolResult(name string, result *tools.Result) string {
 	if result.Success {
 		return result.Output
 	}
 	return fmt.Sprintf("Error: %s", result.Error)
 }
 
-func (f *GenericFormatter) ModelFamily() string {
-	return "generic"
+func (f *NemotronFormatter) ModelFamily() string {
+	return "nemotron"
 }
 
-func (f *GenericFormatter) ValidateFormat(response string) error {
+func (f *NemotronFormatter) ValidateFormat(response string) error {
 	if response == "" {
 		return nil
 	}
