@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  # Local LLM for integration testing (Qwen3.6)
+  # Use local-ollama or remote qwen endpoint
+  pedrogpt:
+    image: ghcr.io/soypete/pedrogpt:latest
+    container_name: pedrogpt
+    ports:
+      - "8080:8080"
+    environment:
+      - MODEL=qwen3.6
+      - API_KEY=test-key-for-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pedro-test
+    profiles:
+      - llm
+
+  # Web search agent for research tasks (uses Qwen3.6)
+  websearch-agent:
+    build:
+      context: ./docker/websearch-agent
+      dockerfile: Dockerfile
+    container_name: websearch-agent
+    environment:
+      - LLM_ENDPOINT=${LLM_ENDPOINT:-http://host.docker.internal:8080/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-test-key}
+      - USER_ID=${USER_ID:-soypete}
+    networks:
+      - pedro-test
+    volumes:
+      - websearch-data:/data
+    profiles:
+      - agent
+
+  # Mock Kitaru server for local adapter testing
+  # Use this OR connect to deployed Kitaru via KITARU_URL env var
+  kitaru-mock:
+    build:
+      context: ./docker/kitaru-mock
+      dockerfile: Dockerfile
+    container_name: kitaru-mock
+    ports:
+      - "8081:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - pedro-test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - mock
+
+networks:
+  pedro-test:
+    driver: bridge
+
+volumes:
+  websearch-data:
