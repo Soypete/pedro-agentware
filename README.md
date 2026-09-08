@@ -49,6 +49,18 @@ define what a harness must implement to be governed by agentware without dependi
 on any agent framework. Enforcement is shared library code: `KeiProxyEvaluator`
 fails closed on every path that is not an explicit `permit`/`allow`.
 
+**Tenant-side distributed proxy.** Agentware is the tenant-side execution layer:
+local tool middleware, delegation, semantic tool bindings, and proxy integration.
+Kei is a **metadata-only control plane** — it holds registration, auth
+*references*, tool bindings (`tool_bindings`), non-secret `secret_refs`, scopes,
+and audit metadata. The distributed proxy is the **connector/provider runtime and
+policy enforcement point**; ABAC is called for **metadata policy decisions only**
+and never executes writes or serves/store credentials. Provider payloads and
+results, customer content, credentials, embeddings, and indexes **never enter
+Kei**. Local agent execution works without a direct ABAC connector dependency;
+governed external operations go through the proxy boundary. See
+`docs/tenant-proxy-reference.md` for the authoritative architecture.
+
 ## Install
 
 ```bash
@@ -156,6 +168,7 @@ resource-level lineage is what makes the question tractable.
 | `typescript/` | TypeScript port |
 | `docs/{go,python,typescript}/` | Usage examples per language |
 | `docs/engineering-design.md` | Architecture |
+| `docs/tenant-proxy-reference.md` | Canonical tenant-side proxy architecture and metadata-only control-plane boundary |
 | `docs/harness-contract.md` | Contract for third-party agent builders |
 | `docs/build-history/` | Archived build-loop working files |
 

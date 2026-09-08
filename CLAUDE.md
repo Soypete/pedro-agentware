@@ -8,6 +8,36 @@ pedro-agentware is MCP-compatible middleware for LLM tool calling: it sits betwe
 
 The delegation contract: `CallerContext.InvokingSubject` is the human who initiated the request and is carried unchanged across every delegation hop (`CallerContext.Delegate` / `delegate()`); `ParentSpan` and `DelegationDepth` record where in the chain the call sits. `Trusted` defaults to **false** (fail-closed) in every language; a missing caller context is never promoted to trusted.
 
+## Before Planning: Wiki First
+
+Search the shared Herdr wiki before planning — `wiki search "tenant data
+distributed proxy"` (and per-topic searches with `--top-k 10`). Read the
+canonical tenant-side proxy architecture in `docs/tenant-proxy-reference.md`
+and preserve its **metadata-only control-plane boundary**: `tool_bindings` and
+`secret_refs` are non-secret metadata only; the distributed proxy is the
+connector/provider runtime and policy enforcement point; ABAC decides metadata
+policy but never executes writes or serves/store credentials; provider
+payloads/results, customer content, credentials, embeddings, and indexes never
+enter Kei; local execution stays possible without a direct ABAC connector
+dependency.
+
+## Shared Herdr Wiki
+
+Architecture and coordination captures live in the shared Herdr wiki
+(plugin: <https://github.com/Soypete/herdr-wiki-plugin>). All operations go
+through the `wiki` command.
+
+- Setup: `git clone https://github.com/Soypete/herdr-wiki-plugin`. If `wiki`
+  is not on PATH, run `python3 /path/to/herdr-wiki-plugin/bin/wiki <args>`.
+- Commands: `wiki search <query> [--top-k N] [--json]`, `wiki stats`,
+  `wiki capture --title T --type T --content C [--link predicate:target ...]`,
+  and `wiki organize` (**human only** — folds the inbox into the graph).
+- Rules: `--type` and link predicates come from the closed vocabulary
+  (`claim`/`contradiction`/`decision`/`entity`/`source`; predicates
+  `derived_from`/`contradicts`/`supports`/`about`/`relates_to`). Captures land
+  in an inbox; **workers never edit wiki pages directly** and always search the
+  wiki before planning.
+
 ## Commands
 
 **Go** (run from `go/`; module `github.com/soypete/pedro-agentware/go`):
@@ -59,10 +89,12 @@ Each language implementation contains the same packages (Go names shown; Python/
 - **Adapters** — wrap agent backends behind a unified interface: Go `go/adapters/{adk,hermes}`; Python `python/adapters/{hermes,kitaru,pydantic}` (each with its own `pyproject.toml`, separate from the main package). See `python/adapters/README.md`.
 - **`memory/`** (Go) — "wiki memory": an LLM-maintained, ontology-constrained markdown wiki scoped per user. `memory.Vault` resolves per-user directories (`<root>/<user>/wiki/` + `raw/`) with path-boundary containment; `memory/page` parses frontmatter + typed wikilinks and emits the A-box as N-Triples; `memory/ontology` loads the read-only T-box and validates pages (class/property existence, domain/range, SKOS cycles) returning structured `Violation` diagnostics. RDF handling uses `github.com/soypete/ontology-go` (the maintainer's library — use it for any RDF/TTL/SKOS work here, not a third-party lib). The T-box lives in the `ontologies/` git submodule (run `git submodule update --init` after cloning) and is read-only: missing terms go in `SCHEMA_GAPS.md`, never invented. The page contract is documented in `SCHEMA.md`.
 - **`kei/`** (Python) — the KEI integration surface for third-party harnesses: `HarnessContract`, auth providers, proxy config, and `KeiProxyEvaluator`, a `PolicyEvaluator` that fails closed on every path that is not an explicit `permit`/`allow`. The contract third-party builders implement against is `docs/harness-contract.md`.
+- **Tenant-side distributed proxy** — agentware provides local tool middleware, delegation, semantic tool bindings, and proxy integration. The distributed proxy is the connector/provider runtime and policy enforcement point; Kei is a metadata-only control plane. ABAC is called for metadata policy decisions only; provider payloads/results, customer content, credentials, embeddings, and indexes never enter Kei. See `docs/tenant-proxy-reference.md`.
 
 ## Docs and design references
 
 - `business/` — PRD, engineering design, SDK plan, milestones. Read `ENGINEERING_DESIGN.md` and `SDK_PLAN.md` before architectural changes.
+- `docs/tenant-proxy-reference.md` — canonical tenant-side proxy architecture and metadata-only control-plane boundary. Read before changing middleware, tool bindings, or the `kei/` surface.
 - `docs/harness-contract.md` — the contract third-party agent builders implement against.
 - `SCHEMA.md` — the wiki-memory page contract (frontmatter, typed wikilinks, ingest workflow). `SCHEMA_GAPS.md` — **active**: ontology terms the read-only T-box lacks; add entries here rather than inventing terms locally.
 - `docs/build-history/` — archived working files from the wiki-memory build loop. `DECISIONS.md` there explains why the component is shaped as it is; worth reading before changing `go/memory`. Historical, not maintained.

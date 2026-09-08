@@ -165,6 +165,32 @@ The library enforces fail-closed security. All of these result in **DENY**:
 
 ---
 
+## Control-Plane Boundary
+
+The harness runs **on the tenant side**; Kei is a **metadata-only control
+plane**. Everything the harness sends to Kei — and everything agentware sends on
+its behalf — is metadata; customer data never crosses the boundary. See
+`docs/tenant-proxy-reference.md` for the authoritative architecture and search
+the shared Herdr wiki (`wiki search "tenant data distributed proxy"`) before
+changing this contract.
+
+- **Non-secret metadata only.** `tool_bindings` (tool → connector routing) and
+  `secret_refs` (opaque reference identifiers) are metadata; they grant no
+  permissions and are never resolved to credentials by the library. The
+  bootstrap secret (`KEI_HARNESS_TOKEN`) is loaded separately from the
+  environment or a secret provider and is rejected from any manifest.
+- **The proxy is the enforcement boundary.** Governed external operations go
+  through the proxy, which is the connector/provider runtime and policy
+  enforcement point. The local middleware chain evaluates policy and audits
+  locally and fails closed.
+- **ABAC is a decision point.** ABAC is called for metadata policy decisions
+  only — it decides; it never executes writes and never serves/store
+  credentials.
+- **Never in Kei.** Provider payloads and results, customer content,
+  credentials, embeddings, and indexes never enter the control plane.
+
+---
+
 ## CallerContext Delegation Rule
 
 **The `invoking_subject` is the HUMAN and is carried UNCHANGED across every delegation hop.**

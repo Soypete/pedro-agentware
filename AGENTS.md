@@ -8,6 +8,72 @@ The same library is implemented three times — **Go (`go/`, the reference imple
 
 The delegation contract: `CallerContext.InvokingSubject` is the human who initiated the request and is carried unchanged across every delegation hop (`CallerContext.Delegate` / `delegate()`); `ParentSpan` and `DelegationDepth` record where in the chain the call sits. `Trusted` defaults to **false** (fail-closed) in every language, and a missing caller context is never promoted to trusted.
 
+## Before Planning: Wiki First
+
+Every worker **must** search the shared Herdr wiki before planning changes:
+
+```bash
+wiki search "tenant data distributed proxy"
+wiki search "<topic>" --top-k 10
+```
+
+Read the canonical tenant-side proxy architecture in `docs/tenant-proxy-reference.md`
+(the in-repo copy of the wiki's *"Documentation audit: tenant data must stay
+behind distributed proxy"* capture) and preserve its **metadata-only
+control-plane boundary**:
+
+- `tool_bindings` and `secret_refs` are **non-secret metadata only**; the
+  bootstrap secret is rejected from any manifest.
+- The distributed proxy is the **connector/provider runtime and policy
+  enforcement point**.
+- **ABAC is called for metadata policy decisions only** — it decides; it does
+  not execute writes or serve/store credentials.
+- Provider payloads/results, customer content, credentials, embeddings, and
+  indexes **never enter Kei**.
+- Local agent execution stays possible without a direct ABAC connector
+  dependency; governed external operations use the proxy boundary.
+
+Never write docs that say ABAC serves credentials or that agentware sends
+customer data through the control plane. See [Shared Herdr Wiki](#shared-herdr-wiki).
+
+## Shared Herdr Wiki
+
+Architecture and coordination captures live in the shared Herdr wiki
+(plugin: <https://github.com/Soypete/herdr-wiki-plugin>). All operations go
+through the `wiki` command, which prints results to stdout.
+
+### Clone / setup
+
+```bash
+git clone https://github.com/Soypete/herdr-wiki-plugin
+# plugin is already installed and `wiki` is on PATH for most workers
+```
+
+If `wiki` is not on PATH, run the launcher directly:
+
+```bash
+python3 /path/to/herdr-wiki-plugin/bin/wiki <args>
+```
+
+### Commands
+
+```bash
+wiki search <query> [--top-k N] [--json]        # search prior notes/claims
+wiki stats                                      # knowledge-base stats
+wiki capture --title T --type T --content C \
+  --link predicate:target ...                   # capture a durable finding
+wiki organize                                   # HUMAN ONLY — folds inbox into the graph
+```
+
+### Rules
+
+- `--type` and link predicates come from the closed vocabulary (`claim`,
+  `contradiction`, `decision`, `entity`, `source`; predicates `derived_from`,
+  `contradicts`, `supports`, `about`, `relates_to`). Do not guess types.
+- Captures land in an inbox; a human runs `wiki organize`. **Workers never
+  edit wiki pages directly.**
+- Search the wiki before planning; when you learn something durable, capture it.
+
 ## Build, Lint, and Test Commands
 
 ### Go (module at `go/`)
@@ -58,6 +124,7 @@ Each language implementation contains the same packages (Go names shown; Python/
 - **Adapters** — wrap agent backends behind a unified interface: Go `go/adapters/{adk,hermes}`; Python `python/adapters/{hermes,kitaru,pydantic}` (each with its own `pyproject.toml`). See `python/adapters/README.md`.
 - **`memory/`** (Go) — "wiki memory": an LLM-maintained, ontology-constrained markdown wiki scoped per user. `memory.Vault` resolves per-user directories (`<root>/<user>/wiki/` + `raw/`) with path-boundary containment; `memory/page` parses frontmatter + typed wikilinks and emits the A-box as N-Triples; `memory/ontology` loads the read-only T-box and validates pages, returning structured `Violation` diagnostics. RDF handling uses `github.com/soypete/ontology-go`. The T-box lives in the `ontologies/` git submodule (`git submodule update --init` after cloning) and is read-only: missing terms go in `SCHEMA_GAPS.md`, never invented. The page contract is in `SCHEMA.md`.
 - **`kei/`** (Python) — the KEI integration surface for third-party harnesses: `HarnessContract`, auth providers, proxy config, and `KeiProxyEvaluator`, a `PolicyEvaluator` that fails closed on every path that is not an explicit affirmative (`permit`/`allow`). See `docs/harness-contract.md`.
+- **Tenant-side distributed proxy** — agentware provides local tool middleware, delegation, semantic tool bindings, and proxy integration. The distributed proxy is the **connector/provider runtime and policy enforcement point**; Kei is a **metadata-only control plane** (registration, auth *references*, tool bindings, scopes, audit metadata). ABAC is called for **metadata policy decisions only** — it never executes writes or serves/store credentials. Provider payloads/results, customer content, credentials, embeddings, and indexes never enter Kei. See `docs/tenant-proxy-reference.md`.
 
 ## Code Style Guidelines
 
@@ -122,10 +189,12 @@ Each language implementation contains the same packages (Go names shown; Python/
 5. **Fail Closed**: Missing context, unknown decisions, and unreachable policy endpoints deny — never allow
 6. **Rate Limiting**: Track per-tool, per-user usage
 7. **Config Hierarchy**: Project -> User -> Defaults
+8. **Metadata-Only Control Plane**: Kei holds metadata (bindings, auth refs, scopes, audit) — never provider payloads, customer content, credentials, embeddings, or indexes
 
 ## Docs and Design References
 
 - `business/` — PRD, engineering design, SDK plan, milestones. Read `ENGINEERING_DESIGN.md` and `SDK_PLAN.md` before architectural changes.
+- `docs/tenant-proxy-reference.md` — **canonical** tenant-side proxy architecture and metadata-only control-plane boundary. Read before changing middleware, tool bindings, or the `kei/` surface.
 - `docs/harness-contract.md` — the contract third-party agent builders implement against.
 - `SCHEMA.md` — the wiki-memory page contract. `SCHEMA_GAPS.md` — **active**: ontology terms the read-only T-box lacks; add entries here rather than inventing terms locally.
 - `docs/build-history/` — archived working files from the wiki-memory build loop. `DECISIONS.md` there explains why the component is shaped as it is. Historical, not maintained.
