@@ -4,6 +4,8 @@ This document defines the contract between a third-party harness and the `pedro-
 
 **Product thesis**: "Bring your own agent." This contract enables any third party to build a harness against this library alone, without reverse-engineering existing implementations.
 
+> **Boundary:** agentware models bindings, opaque auth references, local policy, and delegation — it never grants permission from bindings, resolves connector secrets, executes providers, or depends on Kei/ABAC to run a governed local loop. See [`action-tool-boundary.md`](action-tool-boundary.md).
+
 ---
 
 ## What a Harness Must Implement
