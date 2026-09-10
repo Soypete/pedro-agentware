@@ -80,6 +80,35 @@ describe("OpenAIBackend", () => {
     });
   });
 
+  it("captures reasoning_content on a separate channel", async () => {
+    const body = JSON.stringify({
+      id: "chatcmpl-r",
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: '{"tool": "search", "args": {"q": "x"}}',
+            reasoning_content: "goal: search\n\nobservation: the index is fresh",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
+    });
+    const { fetchFn } = capturingFetch(jsonResponse(body));
+    const backend = new OpenAIBackend({
+      model: "deepseek-reasoner",
+      fetchFn,
+    });
+
+    const resp = await backend.complete([{ role: Role.USER, content: "hi" }]);
+
+    // Reasoning is carried separately, never merged into content.
+    expect(resp.reasoning).toBe("goal: search\n\nobservation: the index is fresh");
+    expect(resp.content).toBe('{"tool": "search", "args": {"q": "x"}}');
+    expect(resp.reasoning).not.toBe(resp.content);
+  });
+
   it("sends an OpenAI-compatible request with auth header and tools", async () => {
     const { fetchFn, captured } = capturingFetch(jsonResponse(completionBody()));
     const backend = new OpenAIBackend({

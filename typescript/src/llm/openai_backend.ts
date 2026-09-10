@@ -54,6 +54,7 @@ const MAX_ERROR_DETAIL_CHARS = 512;
 interface OpenAIChatMessage {
   role: string;
   content?: string | null;
+  reasoning_content?: string | null;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -67,6 +68,7 @@ interface OpenAIChatCompletion {
     finish_reason?: string;
     message?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: Array<{
         id?: string;
         function?: { name?: string; arguments?: string };
@@ -286,6 +288,7 @@ export class OpenAIBackend implements AsyncBackend {
 
     return {
       content: message.content ?? "",
+      reasoning: message.reasoning_content ?? "",
       tool_calls: toolCalls,
       finish_reason: choice?.finish_reason ?? "",
       usage_tokens: usage,
