@@ -27,6 +27,7 @@ const USAGE: TokenUsage = {
 function textResponse(content: string): Response {
   return {
     content,
+    reasoning: "",
     tool_calls: [],
     finish_reason: "stop",
     usage_tokens: USAGE,
@@ -36,6 +37,7 @@ function textResponse(content: string): Response {
 function toolCallResponse(name: string, args: Record<string, unknown>): Response {
   return {
     content: "",
+    reasoning: "",
     tool_calls: [{ id: `call_${name}`, name, arguments: args }],
     finish_reason: "tool_calls",
     usage_tokens: USAGE,
